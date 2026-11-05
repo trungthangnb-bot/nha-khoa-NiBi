@@ -1,0 +1,1721 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Nha Khoa NiBi - BS. Thắng | Quản Lý Phòng Khám</title>
+    <meta name="theme-color" content="#0d9488">
+    <link rel="manifest" href="/static/manifest.webmanifest">
+    <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                    },
+                    colors: {
+                        teal: {
+                            50: '#f0fdfa',
+                            100: '#ccfbf1',
+                            500: '#14b8a6',
+                            600: '#0d9488',
+                            700: '#0f766e',
+                            800: '#115e59',
+                            900: '#134e4a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; }
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        @media (max-width: 768px) {
+            .mobile-pb { padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px)); }
+        }
+        @keyframes slideInLeft {
+            from { transform: translateX(-100%); }
+            to { transform: translateX(0); }
+        }
+        .animate-slide-left {
+            animation: slideInLeft 0.22s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased bg-slate-50 min-h-screen flex flex-col md:flex-row overflow-hidden">
+
+    <!-- ==================== LOCK SCREEN / LOGIN ==================== -->
+    <div id="login-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 transition-all">
+        <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
+            <div class="bg-gradient-to-br from-teal-600 to-teal-800 p-6 text-white text-center relative">
+                <div class="w-16 h-16 mx-auto mb-3 bg-white/20 rounded-2xl flex items-center justify-center shadow-inner backdrop-blur-md">
+                    <i class="fa-solid fa-tooth text-3xl text-white"></i>
+                </div>
+                <h1 class="text-2xl font-bold tracking-tight">Nha Khoa NiBi</h1>
+                <p class="text-teal-100 text-sm font-medium mt-1">Hệ thống quản lý phòng khám - BS. Thắng</p>
+                <div class="mt-3 inline-flex items-center gap-1.5 px-3 py-1 bg-white/15 rounded-full text-xs font-semibold">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    Ninh Vân • Phố Dâu • Cửu Yên
+                </div>
+            </div>
+
+            <form id="login-form" class="p-6 space-y-4">
+                <div id="login-error" class="hidden p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl flex items-center gap-2">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <span id="login-error-msg">Sai thông tin đăng nhập</span>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Tài khoản</label>
+                    <div class="relative">
+                        <i class="fa-solid fa-user absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                        <input type="text" id="login-username" value="admin" autocomplete="username" required
+                               class="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none transition text-sm"
+                               placeholder="admin hoặc nhân viên">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Mật khẩu</label>
+                    <div class="relative">
+                        <i class="fa-solid fa-lock absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                        <input type="password" id="login-password" value="123456" autocomplete="current-password" required
+                               class="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none transition text-sm"
+                               placeholder="Mật khẩu bảo mật">
+                        <button type="button" onclick="togglePasswordVisibility('login-password', this)" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1">
+                            <i class="fa-solid fa-eye text-sm"></i>
+                        </button>
+                    </div>
+                    <p class="text-[11px] text-slate-400 mt-1 italic">Mật khẩu admin mặc định: <b>123456</b></p>
+                </div>
+
+                <div class="flex items-center justify-between text-sm">
+                    <label class="flex items-center gap-2 cursor-pointer text-slate-600 select-none">
+                        <input type="checkbox" id="login-remember" checked class="w-4 h-4 text-teal-600 rounded focus:ring-teal-500 border-slate-300">
+                        <span>Ghi nhớ 30 ngày</span>
+                    </label>
+                </div>
+
+                <button type="submit" id="btn-login-submit"
+                        class="w-full py-3 bg-teal-600 hover:bg-teal-700 active:scale-[0.99] text-white font-bold rounded-xl shadow-lg shadow-teal-600/30 transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-right-to-bracket"></i>
+                    <span>Mở khóa hệ thống</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==================== DESKTOP SIDEBAR ==================== -->
+    <aside class="hidden md:flex flex-col w-64 bg-slate-900 text-slate-300 flex-shrink-0 select-none border-r border-slate-800">
+        <!-- Brand -->
+        <div class="p-5 border-b border-slate-800 flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-teal-500/20 border border-teal-500/40 text-teal-400 flex items-center justify-center flex-shrink-0 shadow-inner">
+                <i class="fa-solid fa-tooth text-xl"></i>
+            </div>
+            <div>
+                <h2 class="font-bold text-white text-base leading-tight">Nha Khoa NiBi</h2>
+                <p class="text-xs text-teal-400 font-medium">BS. Thắng</p>
+            </div>
+        </div>
+
+        <!-- Branch Selector -->
+        <div class="p-3 border-b border-slate-800 bg-slate-950/40">
+            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 block">Cơ sở hoạt động</label>
+            <select id="branch-select" onchange="onBranchChange(this.value)" class="w-full bg-slate-800 border border-slate-700 text-teal-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-teal-500">
+                <option value="">🏢 Tất cả 3 cơ sở</option>
+                <option value="Ninh Vân">📍 Ninh Vân</option>
+                <option value="Phố Dâu">📍 Phố Dâu</option>
+                <option value="Cửu Yên">📍 Cửu Yên</option>
+            </select>
+        </div>
+
+        <!-- Navigation Menu -->
+        <nav class="flex-1 p-3 space-y-1 overflow-y-auto custom-scrollbar text-sm font-medium">
+            <button onclick="switchTab('dashboard')" data-tab-btn="dashboard" class="admin-only nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition text-left text-teal-400 bg-slate-800/80 font-semibold shadow-sm">
+                <i class="fa-solid fa-chart-pie w-5 text-center"></i>
+                <span>Tổng quan</span>
+            </button>
+            <button onclick="switchTab('patients')" data-tab-btn="patients" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition text-left text-slate-400 hover:text-white hover:bg-slate-800/60">
+                <i class="fa-solid fa-users w-5 text-center"></i>
+                <span>Bệnh nhân & Bệnh án</span>
+            </button>
+            <button onclick="switchTab('debts')" data-tab-btn="debts" class="nav-item w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition text-left text-slate-400 hover:text-white hover:bg-slate-800/60">
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-hand-holding-dollar w-5 text-center"></i>
+                    <span>Sổ công nợ</span>
+                </div>
+                <span id="badge-debt-count" class="hidden px-2 py-0.5 text-[10px] font-bold rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30">0</span>
+            </button>
+            <button onclick="switchTab('appointments')" data-tab-btn="appointments" class="nav-item w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition text-left text-slate-400 hover:text-white hover:bg-slate-800/60">
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-calendar-check w-5 text-center"></i>
+                    <span>Lịch hẹn & Tái khám</span>
+                </div>
+                <span id="badge-appt-today" class="hidden px-2 py-0.5 text-[10px] font-bold rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30">0</span>
+            </button>
+
+            <!-- Dedicated Admin Management Hub -->
+            <div class="pt-3 mt-2 border-t border-slate-800 admin-only">
+                <div class="px-3 py-1 flex items-center justify-between">
+                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                        <i class="fa-solid fa-crown text-[10px]"></i>
+                        <span>QUẢN TRỊ ADMIN</span>
+                    </span>
+                    <span class="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded text-[9px] font-bold">BS. Thắng</span>
+                </div>
+                <button onclick="switchTab('admin-hub')" data-tab-btn="admin-hub" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition text-left text-amber-300 hover:text-white hover:bg-amber-950/40 border border-amber-500/30 font-semibold shadow-sm mt-1">
+                    <i class="fa-solid fa-sliders w-5 text-center text-amber-400"></i>
+                    <div class="min-w-0">
+                        <span class="font-bold block text-xs">Trung Tâm Quản Trị</span>
+                        <span class="text-[10px] text-slate-400 block truncate">Doanh thu • Cấp quyền • Cài đặt</span>
+                    </div>
+                </button>
+            </div>
+        </nav>
+
+        <!-- Quick Intake Button -->
+        <div class="p-3 border-t border-slate-800">
+            <button onclick="openPatientModal()" class="w-full py-2.5 bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white font-bold rounded-xl shadow-md shadow-teal-500/20 text-xs flex items-center justify-center gap-2">
+                <i class="fa-solid fa-user-plus"></i>
+                <span>+ Tiếp đón bệnh nhân</span>
+            </button>
+        </div>
+
+        <!-- User profile in sidebar footer -->
+        <div class="p-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-8 h-8 rounded-full bg-teal-600/30 border border-teal-500/40 text-teal-300 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                    <i class="fa-solid fa-user-shield"></i>
+                </div>
+                <div class="min-w-0">
+                    <p id="user-display-name" class="text-xs font-bold text-white truncate">Admin</p>
+                    <p id="user-display-role" class="text-[10px] text-teal-400 uppercase tracking-wider">BS. Thắng</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-1">
+                <button onclick="openChangePasswordModal()" title="Đổi mật khẩu" class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition text-xs">
+                    <i class="fa-solid fa-key"></i>
+                </button>
+                <button onclick="doLogout()" title="Đăng xuất" class="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-slate-800 transition text-xs">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                </button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- ==================== MOBILE SLIDE-OVER DRAWER ==================== -->
+    <div id="mobile-sidebar-drawer" class="hidden fixed inset-0 z-50 flex">
+        <!-- Backdrop overlay (click to close) -->
+        <div onclick="closeMobileSidebar()" class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm transition-opacity"></div>
+
+        <!-- Drawer Panel -->
+        <div class="relative w-72 max-w-[85vw] bg-slate-900 text-slate-100 h-full flex flex-col shadow-2xl z-10 animate-slide-left">
+            <!-- Header -->
+            <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/40">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-teal-500 to-teal-400 text-slate-950 flex items-center justify-center font-black text-lg shadow-md shadow-teal-500/20">
+                        <i class="fa-solid fa-tooth"></i>
+                    </div>
+                    <div>
+                        <h2 class="font-extrabold text-white text-sm tracking-tight">Nha Khoa NiBi</h2>
+                        <p class="text-[10px] text-teal-400 font-semibold tracking-wider uppercase">BS. Thắng</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeMobileSidebar()" class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Branch Select in Mobile Drawer -->
+            <div class="p-3 border-b border-slate-800 bg-slate-950/30">
+                <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 block">Cơ sở hoạt động</label>
+                <select id="branch-select-mobile" onchange="onBranchChange(this.value)" class="w-full bg-slate-800 border border-slate-700 text-teal-300 rounded-lg px-2.5 py-2 text-xs font-semibold focus:outline-none focus:border-teal-500">
+                    <option value="">🏢 Tất cả 3 cơ sở</option>
+                    <option value="Ninh Vân">📍 Ninh Vân</option>
+                    <option value="Phố Dâu">📍 Phố Dâu</option>
+                    <option value="Cửu Yên">📍 Cửu Yên</option>
+                </select>
+            </div>
+
+            <!-- Navigation Links -->
+            <nav class="flex-1 p-3 space-y-1.5 overflow-y-auto custom-scrollbar text-sm font-medium">
+                <!-- Admin Hub (Admin only) -->
+                <div class="admin-only pb-2 mb-2 border-b border-slate-800">
+                    <div class="px-2 py-1 mb-1 text-[10px] font-extrabold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                        <i class="fa-solid fa-crown text-[10px]"></i>
+                        <span>QUẢN TRỊ ADMIN</span>
+                    </div>
+                    <button type="button" onclick="switchTab('admin-hub')" data-tab-btn="admin-hub" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition text-left text-amber-300 hover:text-white hover:bg-amber-950/40 border border-amber-500/30 font-semibold shadow-sm">
+                        <i class="fa-solid fa-sliders w-5 text-center text-amber-400"></i>
+                        <div class="min-w-0">
+                            <span class="font-bold block text-xs">Trung Tâm Quản Trị</span>
+                            <span class="text-[10px] text-slate-400 block truncate">Doanh thu • Cấp quyền • Cài đặt</span>
+                        </div>
+                    </button>
+                </div>
+
+                <!-- Dashboard (Admin only) -->
+                <button type="button" onclick="switchTab('dashboard')" data-tab-btn="dashboard" class="admin-only nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition text-left text-slate-400 hover:text-white hover:bg-slate-800/60">
+                    <i class="fa-solid fa-chart-pie w-5 text-center"></i>
+                    <span class="text-xs font-semibold">Tổng quan phòng khám</span>
+                </button>
+
+                <!-- Patients -->
+                <button type="button" onclick="switchTab('patients')" data-tab-btn="patients" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition text-left text-slate-400 hover:text-white hover:bg-slate-800/60">
+                    <i class="fa-solid fa-users w-5 text-center"></i>
+                    <span class="text-xs font-semibold">Bệnh nhân & Bệnh án</span>
+                </button>
+
+                <!-- Debts -->
+                <button type="button" onclick="switchTab('debts')" data-tab-btn="debts" class="nav-item w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition text-left text-slate-400 hover:text-white hover:bg-slate-800/60">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-solid fa-hand-holding-dollar w-5 text-center"></i>
+                        <span class="text-xs font-semibold">Sổ công nợ</span>
+                    </div>
+                    <span id="badge-debt-count-drawer" class="hidden px-2 py-0.5 text-[10px] font-bold rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30">0</span>
+                </button>
+
+                <!-- Appointments -->
+                <button type="button" onclick="switchTab('appointments')" data-tab-btn="appointments" class="nav-item w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition text-left text-slate-400 hover:text-white hover:bg-slate-800/60">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-solid fa-calendar-check w-5 text-center"></i>
+                        <span class="text-xs font-semibold">Lịch hẹn & Tái khám</span>
+                    </div>
+                    <span id="badge-appt-today-drawer" class="hidden px-2 py-0.5 text-[10px] font-bold rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30">0</span>
+                </button>
+            </nav>
+
+            <!-- Quick Intake in Drawer -->
+            <div class="p-3 border-t border-slate-800">
+                <button type="button" onclick="openPatientModal(); closeMobileSidebar();" class="w-full py-2.5 bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white font-bold rounded-xl shadow-md shadow-teal-500/20 text-xs flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-user-plus"></i>
+                    <span>+ Tiếp đón bệnh nhân</span>
+                </button>
+            </div>
+
+            <!-- Footer Profile -->
+            <div class="p-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <div class="w-8 h-8 rounded-full bg-teal-600/30 border border-teal-500/40 text-teal-300 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                        <i class="fa-solid fa-user-shield"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <p id="user-display-name-drawer" class="text-xs font-bold text-white truncate">Admin</p>
+                        <p id="user-display-role-drawer" class="text-[10px] text-teal-400 uppercase tracking-wider">BS. Thắng</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <button type="button" onclick="openChangePasswordModal(); closeMobileSidebar();" title="Đổi mật khẩu" class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition text-xs">
+                        <i class="fa-solid fa-key"></i>
+                    </button>
+                    <button type="button" onclick="doLogout()" title="Đăng xuất" class="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-slate-800 transition text-xs">
+                        <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MAIN CONTENT AREA ==================== -->
+    <main class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+        <!-- Top Navigation Bar -->
+        <header class="bg-white border-b border-slate-200 px-3 md:px-4 py-2.5 md:py-3 flex items-center justify-between flex-shrink-0 z-10 shadow-sm">
+            <div class="flex items-center gap-2.5 md:gap-3">
+                <button type="button" onclick="toggleMobileSidebar()" title="Mở danh mục trang" class="md:hidden p-2 -ml-1 text-slate-700 hover:text-teal-600 active:scale-95 rounded-lg hover:bg-slate-100 transition flex items-center justify-center">
+                    <i class="fa-solid fa-bars text-xl"></i>
+                </button>
+                <div>
+                    <h1 id="page-title" class="text-lg md:text-xl font-extrabold text-slate-800">Tổng quan phòng khám</h1>
+                    <p id="page-subtitle" class="text-xs text-slate-500 hidden sm:block">Dữ liệu đồng bộ trực tiếp • 3 cơ sở Ninh Vân, Phố Dâu, Cửu Yên</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <div class="hidden sm:flex items-center gap-2">
+                    <select id="branch-select-top" onchange="onBranchChange(this.value)" class="bg-slate-100 border border-slate-200 text-slate-700 rounded-xl px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500">
+                        <option value="">🏢 Tất cả 3 cơ sở</option>
+                        <option value="Ninh Vân">📍 Ninh Vân</option>
+                        <option value="Phố Dâu">📍 Phố Dâu</option>
+                        <option value="Cửu Yên">📍 Cửu Yên</option>
+                    </select>
+                </div>
+                <button onclick="toggleAdminAlertsModal()" class="admin-only relative p-2 text-slate-600 hover:text-amber-600 rounded-xl hover:bg-slate-100 transition flex items-center justify-center" title="Cảnh báo sửa đổi bệnh án (Bí mật Admin)">
+                    <i class="fa-solid fa-bell text-base md:text-lg"></i>
+                    <span id="admin-alert-badge" class="hidden absolute top-0.5 right-0.5 px-1.5 py-0.2 min-w-[18px] text-[10px] font-extrabold text-white bg-rose-600 rounded-full text-center shadow ring-2 ring-white leading-tight">0</span>
+                </button>
+                <button onclick="switchTab('admin-hub')" class="admin-only px-3 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs md:text-sm font-bold shadow-md shadow-amber-500/25 flex items-center gap-1.5 transition">
+                    <i class="fa-solid fa-crown text-[11px] text-amber-200"></i>
+                    <span class="hidden sm:inline">Quản Trị Admin</span>
+                    <span class="sm:hidden">Admin</span>
+                </button>
+                <button onclick="openPatientModal()" class="px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs md:text-sm font-bold shadow-md shadow-teal-600/20 flex items-center gap-1.5 transition">
+                    <i class="fa-solid fa-user-plus"></i>
+                    <span class="hidden sm:inline">Tiếp đón bệnh nhân</span>
+                    <span class="sm:hidden">Tiếp đón</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Body Scroll Container -->
+        <div id="content-scroll" class="flex-1 overflow-y-auto custom-scrollbar p-3 md:p-6 mobile-pb">
+
+            <!-- ==================== TAB: DASHBOARD ==================== -->
+            <section id="tab-dashboard" class="space-y-6">
+                <!-- Stat Cards -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+                    <!-- Total Patients -->
+                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tổng bệnh nhân</p>
+                            <h3 id="stat-patients" class="text-2xl md:text-3xl font-extrabold text-slate-800 mt-1">--</h3>
+                            <p class="text-[11px] text-teal-600 font-medium mt-1">Hồ sơ khám chữa</p>
+                        </div>
+                        <div class="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-users"></i>
+                        </div>
+                    </div>
+
+                    <!-- Visits Today -->
+                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Khám hôm nay</p>
+                            <h3 id="stat-visits-today" class="text-2xl md:text-3xl font-extrabold text-slate-800 mt-1">--</h3>
+                            <p class="text-[11px] text-emerald-600 font-medium mt-1">Lượt tiếp đón</p>
+                        </div>
+                        <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-notes-medical"></i>
+                        </div>
+                    </div>
+
+                    <!-- Revenue Month (Admin) -->
+                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between admin-only">
+                        <div>
+                            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Doanh thu tháng này</p>
+                            <h3 id="stat-revenue-month" class="text-xl md:text-2xl font-extrabold text-emerald-600 mt-1">--</h3>
+                            <p id="stat-billed-month" class="text-[11px] text-slate-400 mt-1">Phát sinh: --</p>
+                        </div>
+                        <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-sack-dollar"></i>
+                        </div>
+                    </div>
+
+                    <!-- Total Debt -->
+                    <div class="bg-white p-4 rounded-2xl border border-rose-200 bg-rose-50/20 shadow-sm flex items-center justify-between cursor-pointer hover:border-rose-300 transition" onclick="switchTab('debts')">
+                        <div>
+                            <p class="text-xs font-semibold text-rose-600 uppercase tracking-wider">Tổng nợ cần thu</p>
+                            <h3 id="stat-total-debt" class="text-xl md:text-2xl font-extrabold text-rose-600 mt-1">--</h3>
+                            <p id="stat-debt-patients" class="text-[11px] text-rose-500 font-medium mt-1">-- người đang nợ</p>
+                        </div>
+                        <div class="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-hand-holding-dollar"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Admin 12-Month Revenue Chart -->
+                <div class="admin-only bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                    <div class="flex items-center justify-between flex-wrap gap-2">
+                        <div>
+                            <h3 class="font-bold text-slate-800 text-base">Biểu đồ doanh thu thực thu 12 tháng gần nhất</h3>
+                            <p class="text-xs text-slate-500">Tiền thực thu vào quỹ theo từng tháng</p>
+                        </div>
+                        <button onclick="switchTab('reports')" class="text-xs font-bold text-teal-600 hover:text-teal-700 flex items-center gap-1">
+                            <span>Chi tiết báo cáo</span>
+                            <i class="fa-solid fa-chevron-right text-[10px]"></i>
+                        </button>
+                    </div>
+                    <div id="dashboard-chart-container" class="h-48 flex items-end gap-2 pt-6 pb-2 px-1 border-b border-slate-100 overflow-x-auto custom-scrollbar">
+                        <!-- Chart bars dynamically rendered -->
+                    </div>
+                </div>
+
+                <!-- 2 Columns: Top Debtors & Upcoming Appts -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+                    <!-- Top Debtors -->
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center gap-2">
+                                <div class="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center text-sm font-bold">
+                                    <i class="fa-solid fa-triangle-exclamation"></i>
+                                </div>
+                                <h3 class="font-bold text-slate-800 text-sm md:text-base">Nợ nhiều cần thu hồi</h3>
+                            </div>
+                            <button onclick="switchTab('debts')" class="text-xs text-teal-600 hover:underline font-semibold">Xem tất cả</button>
+                        </div>
+                        <div id="top-debtors-list" class="space-y-2.5 flex-1 divide-y divide-slate-100">
+                            <!-- Injected by JS -->
+                        </div>
+                    </div>
+
+                    <!-- Upcoming Appointments -->
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center gap-2">
+                                <div class="w-8 h-8 rounded-lg bg-teal-100 text-teal-600 flex items-center justify-center text-sm font-bold">
+                                    <i class="fa-solid fa-calendar-day"></i>
+                                </div>
+                                <h3 class="font-bold text-slate-800 text-sm md:text-base">Lịch hẹn trong 7 ngày tới</h3>
+                            </div>
+                            <button onclick="switchTab('appointments')" class="text-xs text-teal-600 hover:underline font-semibold">Xem tất cả</button>
+                        </div>
+                        <div id="upcoming-appts-list" class="space-y-2.5 flex-1 divide-y divide-slate-100">
+                            <!-- Injected by JS -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== TAB: PATIENTS ==================== -->
+            <section id="tab-patients" class="hidden space-y-4">
+                <!-- Search & Filters -->
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center gap-3">
+                    <div class="relative flex-1 w-full">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                        <input type="text" id="patient-search-input" oninput="debounceSearchPatients()"
+                               class="w-full pl-10 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm font-medium focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none transition"
+                               placeholder="Tìm tên không dấu, SĐT, mã BN (BN00123), địa chỉ...">
+                        <button type="button" onclick="clearPatientSearch()" id="btn-clear-search" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                            <i class="fa-solid fa-circle-xmark"></i>
+                        </button>
+                    </div>
+
+                    <div class="flex items-center gap-2 w-full md:w-auto">
+                        <label class="flex items-center gap-2 cursor-pointer bg-slate-50 border border-slate-200 hover:bg-slate-100 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 select-none whitespace-nowrap">
+                            <input type="checkbox" id="filter-only-debt" onchange="loadPatients(0)" class="w-4 h-4 text-teal-600 rounded">
+                            <span>Chỉ người có nợ</span>
+                        </label>
+                        <button onclick="exportPatientsCsv()" class="admin-only px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition">
+                            <i class="fa-solid fa-file-excel text-emerald-600"></i>
+                            <span class="hidden sm:inline">Xuất Excel</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Patient Results Header -->
+                <div class="flex items-center justify-between text-xs text-slate-500 px-1">
+                    <span>Tìm thấy: <b id="patients-count" class="text-slate-800">0</b> bệnh nhân</span>
+                    <span id="patients-page-info">Trang 1</span>
+                </div>
+
+                <!-- Patient List / Table -->
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                                <tr>
+                                    <th class="py-3 px-4">Bệnh nhân</th>
+                                    <th class="py-3 px-4">Điện thoại</th>
+                                    <th class="py-3 px-4 hidden md:table-cell">Năm sinh / Tuổi</th>
+                                    <th class="py-3 px-4 hidden lg:table-cell">Địa chỉ</th>
+                                    <th class="py-3 px-4">Cơ sở</th>
+                                    <th class="py-3 px-4 text-right">Tổng tiền</th>
+                                    <th class="py-3 px-4 text-right">Còn nợ</th>
+                                    <th class="py-3 px-4 text-center">Thao tác</th>
+                                </tr>
+                            </thead>
+                            <tbody id="patients-table-body" class="divide-y divide-slate-100">
+                                <!-- Rendered dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <!-- Empty State -->
+                    <div id="patients-empty" class="hidden p-12 text-center text-slate-400">
+                        <i class="fa-solid fa-user-slash text-4xl mb-3 text-slate-300"></i>
+                        <p class="font-medium text-slate-600">Không tìm thấy bệnh nhân nào</p>
+                        <p class="text-xs text-slate-400 mt-1">Thử đổi từ khóa tìm kiếm hoặc bấm tiếp đón bệnh nhân mới</p>
+                    </div>
+                </div>
+
+                <!-- Pagination -->
+                <div class="flex items-center justify-center gap-2 pt-2" id="patients-pagination">
+                    <!-- Prev / Next buttons -->
+                </div>
+            </section>
+
+            <!-- ==================== TAB: DEBTS ==================== -->
+            <section id="tab-debts" class="hidden space-y-4">
+                <!-- Top Debt Overview Banner -->
+                <div class="bg-gradient-to-br from-rose-600 to-rose-800 rounded-2xl p-5 text-white shadow-lg shadow-rose-600/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div>
+                        <div class="flex items-center gap-2 text-rose-200 text-xs font-bold uppercase tracking-wider">
+                            <i class="fa-solid fa-book-bookmark"></i>
+                            <span>Sổ Quản Lý Công Nợ Điều Trị</span>
+                        </div>
+                        <h2 id="debt-banner-total" class="text-3xl font-extrabold mt-1">0K</h2>
+                        <p id="debt-banner-sub" class="text-rose-100 text-xs mt-1">Tổng cộng 0 bệnh nhân chưa thanh toán hết</p>
+                    </div>
+                    <button onclick="exportDebtsCsv()" class="px-4 py-2.5 bg-white text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-bold shadow-md flex items-center gap-2 transition flex-shrink-0">
+                        <i class="fa-solid fa-download"></i>
+                        <span>Xuất danh sách công nợ (CSV)</span>
+                    </button>
+                </div>
+
+                <!-- Search & Sort Controls -->
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center gap-3">
+                    <div class="relative flex-1 w-full">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                        <input type="text" id="debt-search-input" oninput="debounceSearchDebts()"
+                               class="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm font-medium focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none transition"
+                               placeholder="Lọc theo tên, SĐT con nợ...">
+                    </div>
+                    <div class="flex items-center gap-2 w-full md:w-auto">
+                        <select id="debt-sort-select" onchange="loadDebts()" class="bg-slate-50 border border-slate-200 text-slate-700 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500">
+                            <option value="debt">Sắp xếp: Nợ nhiều nhất</option>
+                            <option value="oldest">Sắp xếp: Nợ lâu ngày nhất</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Debts List -->
+                <div id="debts-list-container" class="space-y-3">
+                    <!-- Cards rendered by JS -->
+                </div>
+            </section>
+
+            <!-- ==================== TAB: APPOINTMENTS ==================== -->
+            <section id="tab-appointments" class="hidden space-y-4">
+                <!-- Appointment Header & Filter Tabs -->
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div class="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
+                        <button onclick="filterAppointments('month')" data-appt-filter="month" class="appt-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-teal-600 text-white shadow-sm transition flex items-center gap-1">
+                            <i class="fa-solid fa-calendar-days text-[11px]"></i>
+                            <span>Trong tháng này</span>
+                            <span id="appt-count-month" class="ml-1 px-1.5 py-0.2 bg-white/20 rounded-full text-[10px]">0</span>
+                        </button>
+                        <button onclick="filterAppointments('today')" data-appt-filter="today" class="appt-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition">
+                            <span>Hôm nay</span>
+                            <span id="appt-count-today" class="ml-1 px-1.5 py-0.2 bg-slate-200 rounded-full text-[10px]">0</span>
+                        </button>
+                        <button onclick="filterAppointments('upcoming')" data-appt-filter="upcoming" class="appt-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition">
+                            <span>Sắp tới</span>
+                            <span id="appt-count-upcoming" class="ml-1 px-1.5 py-0.2 bg-slate-200 rounded-full text-[10px]">0</span>
+                        </button>
+                        <button onclick="filterAppointments('overdue')" data-appt-filter="overdue" class="appt-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition">
+                            <span>Quá hạn</span>
+                            <span id="appt-count-overdue" class="ml-1 px-1.5 py-0.2 bg-rose-100 text-rose-700 rounded-full text-[10px]">0</span>
+                        </button>
+                        <button onclick="filterAppointments('done')" data-appt-filter="done" class="appt-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition">
+                            <span>Đã xong / Hủy</span>
+                        </button>
+                        <button onclick="filterAppointments('all')" data-appt-filter="all" class="appt-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition">
+                            <span>Tất cả</span>
+                        </button>
+                    </div>
+
+                    <button onclick="openNewAppointmentModal()" class="px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-md shadow-teal-600/20 flex items-center gap-1.5 transition flex-shrink-0">
+                        <i class="fa-solid fa-calendar-plus"></i>
+                        <span>+ Đặt lịch hẹn mới</span>
+                    </button>
+                </div>
+
+                <!-- Appointments List -->
+                <div id="appointments-list-container" class="space-y-3">
+                    <!-- Injected by JS -->
+                </div>
+            </section>
+
+            <!-- ==================== TAB: DEDICATED ADMIN HUB (Admin Only) ==================== -->
+            <section id="tab-admin-hub" class="hidden space-y-5 admin-only">
+                <!-- VIP Admin Banner -->
+                <div class="bg-gradient-to-r from-slate-900 via-amber-950/80 to-slate-900 border border-amber-500/30 rounded-2xl p-5 text-white shadow-xl relative overflow-hidden">
+                    <div class="absolute right-0 top-0 translate-x-4 -translate-y-4 w-40 h-40 bg-amber-500/10 rounded-full blur-2xl pointer-events-none"></div>
+                    <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative z-10">
+                        <div class="flex items-center gap-3.5">
+                            <div class="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center text-2xl shadow-inner flex-shrink-0">
+                                <i class="fa-solid fa-crown"></i>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <h2 class="text-xl font-extrabold text-white">Trung Tâm Quản Trị Hệ Thống</h2>
+                                    <span class="px-2 py-0.5 bg-amber-500 text-slate-950 font-extrabold text-[10px] rounded-full uppercase tracking-wider">BS. Thắng</span>
+                                </div>
+                                <p class="text-xs text-amber-200/80 mt-0.5">Kiểm soát tài chính, cấp quyền nhân viên, tùy biến thông số và sao lưu an toàn</p>
+                            </div>
+                        </div>
+
+                        <!-- Sub-tab Navigation Pill Switcher -->
+                        <div class="flex items-center gap-1 bg-slate-950/60 p-1.5 rounded-xl border border-slate-800 text-xs font-bold overflow-x-auto max-w-full">
+                            <button onclick="switchAdminSubTab('reports')" data-admin-sub="reports" class="admin-sub-btn px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 transition shadow">
+                                <i class="fa-solid fa-chart-line mr-1"></i><span>Doanh Thu</span>
+                            </button>
+                            <button onclick="switchAdminSubTab('users')" data-admin-sub="users" class="admin-sub-btn px-3 py-1.5 rounded-lg text-slate-300 hover:text-white transition">
+                                <i class="fa-solid fa-users-gear mr-1"></i><span>Tài Khoản & Phân Quyền</span>
+                            </button>
+                            <button onclick="switchAdminSubTab('settings')" data-admin-sub="settings" class="admin-sub-btn px-3 py-1.5 rounded-lg text-slate-300 hover:text-white transition">
+                                <i class="fa-solid fa-sliders mr-1"></i><span>Chỉnh Sửa Ứng Dụng</span>
+                            </button>
+                            <button onclick="switchAdminSubTab('backup')" data-admin-sub="backup" class="admin-sub-btn px-3 py-1.5 rounded-lg text-slate-300 hover:text-white transition">
+                                <i class="fa-solid fa-database mr-1"></i><span>Sao Lưu & Audit</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUB-TAB 1: REVENUE & REPORTS -->
+                <div id="admin-sub-view-reports" class="space-y-4">
+                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                        <div>
+                            <h3 class="font-extrabold text-slate-800 text-base">Báo Cáo Doanh Thu & Chỉ Số Tài Chính</h3>
+                            <p class="text-xs text-slate-500">Đối soát thực thu vào quỹ, chi phí phát sinh và phân loại cơ sở</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <select id="report-year-select" onchange="loadReports()" class="bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-teal-500">
+                                <!-- Populated dynamically -->
+                            </select>
+                            <button onclick="exportPatientsCsv()" class="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition">
+                                <i class="fa-solid fa-file-excel text-emerald-600"></i>
+                                <span>Xuất BN (CSV)</span>
+                            </button>
+                            <button onclick="exportDebtsCsv()" class="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition">
+                                <i class="fa-solid fa-file-invoice-dollar text-rose-600"></i>
+                                <span>Xuất nợ (CSV)</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Year Summary Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                            <p class="text-xs font-bold uppercase text-slate-400">Tổng thực thu năm</p>
+                            <h3 id="report-year-collected" class="text-2xl font-extrabold text-emerald-600 mt-1">0K</h3>
+                            <p class="text-xs text-slate-400 mt-1">Tiền bệnh nhân đã thanh toán</p>
+                        </div>
+                        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                            <p class="text-xs font-bold uppercase text-slate-400">Tổng phát sinh khám</p>
+                            <h3 id="report-year-billed" class="text-2xl font-extrabold text-teal-600 mt-1">0K</h3>
+                            <p class="text-xs text-slate-400 mt-1">Giá trị các ca điều trị</p>
+                        </div>
+                        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                            <p class="text-xs font-bold uppercase text-slate-400">Tổng số lượt khám</p>
+                            <h3 id="report-year-visits" class="text-2xl font-extrabold text-slate-800 mt-1">0</h3>
+                            <p class="text-xs text-slate-400 mt-1">Lượt bệnh nhân điều trị</p>
+                        </div>
+                    </div>
+
+                    <!-- 12 Months Table -->
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 font-bold text-slate-800 text-sm">
+                            Chi tiết tài chính 12 tháng
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm">
+                                <thead class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase">
+                                    <tr>
+                                        <th class="py-3 px-4">Tháng</th>
+                                        <th class="py-3 px-4 text-right">Lượt khám</th>
+                                        <th class="py-3 px-4 text-right">Phát sinh điều trị</th>
+                                        <th class="py-3 px-4 text-right">Thực thu vào quỹ</th>
+                                        <th class="py-3 px-4 text-right">Chênh lệch / Tồn nợ</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="report-months-body" class="divide-y divide-slate-100">
+                                    <!-- Populated dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Breakdown by Category & Branch -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                            <h4 class="font-bold text-slate-800 text-sm mb-3">Doanh số theo nhóm dịch vụ</h4>
+                            <div id="report-categories-list" class="space-y-3"></div>
+                        </div>
+                        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                            <h4 class="font-bold text-slate-800 text-sm mb-3">Doanh số theo cơ sở phòng khám</h4>
+                            <div id="report-branches-list" class="space-y-3"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUB-TAB 2: USERS & PERMISSIONS -->
+                <div id="admin-sub-view-users" class="hidden space-y-4">
+                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                        <div>
+                            <h3 class="font-extrabold text-slate-800 text-base">Quản Lý Đội Ngũ Nhân Viên & Phân Quyền</h3>
+                            <p class="text-xs text-slate-500">Tạo tài khoản đăng nhập cho nhân viên, lễ tân, phụ tá và cấp quyền sửa đổi</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="openPinAdminModal()" class="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+                                <i class="fa-solid fa-key text-amber-600"></i>
+                                <span>Đổi PIN sửa đổi (0000)</span>
+                            </button>
+                            <button onclick="openCreateUserModal()" class="px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-md shadow-teal-600/20 transition flex items-center gap-1.5">
+                                <i class="fa-solid fa-user-plus"></i>
+                                <span>+ Thêm nhân viên mới</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Users List Cards -->
+                    <div id="admin-users-list" class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- SUB-TAB 3: APP CUSTOMIZATION & SETTINGS -->
+                <div id="admin-sub-view-settings" class="hidden space-y-4">
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                        <div class="mb-4 pb-3 border-b border-slate-100">
+                            <h3 class="font-extrabold text-slate-800 text-base">Chỉnh Sửa Thông Số Ứng Dụng & Phòng Khám</h3>
+                            <p class="text-xs text-slate-500">Thay đổi tên phòng khám, chi nhánh hoạt động, nhóm dịch vụ và danh sách bác sĩ</p>
+                        </div>
+
+                        <form id="clinic-settings-form" onsubmit="event.preventDefault(); saveClinicSettings();" class="space-y-4">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Tên thương hiệu phòng khám</label>
+                                    <input type="text" id="cfg-clinic-name" required
+                                           class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold focus:bg-white focus:border-teal-500 outline-none text-sm"
+                                           placeholder="Ví dụ: Nha Khoa NiBi - BS. Thắng">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Số điện thoại hotline</label>
+                                    <input type="text" id="cfg-clinic-hotline"
+                                           class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold focus:bg-white focus:border-teal-500 outline-none text-sm"
+                                           placeholder="Ví dụ: 0976.838.901">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Địa chỉ / Slogan phòng khám</label>
+                                <input type="text" id="cfg-clinic-address"
+                                       class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-teal-500 outline-none text-sm"
+                                       placeholder="Ví dụ: Ninh Vân • Phố Dâu • Cửu Yên">
+                            </div>
+
+                            <div class="pt-3 border-t border-slate-100 space-y-4">
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-slate-600 mb-1">
+                                        Danh sách các cơ sở phòng khám (cách nhau bởi dấu phẩy)
+                                    </label>
+                                    <input type="text" id="cfg-branches" required
+                                           class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold focus:bg-white focus:border-teal-500 outline-none text-sm"
+                                           placeholder="Ninh Vân, Phố Dâu, Cửu Yên">
+                                    <p class="text-[11px] text-slate-400 mt-1">Cơ sở này sẽ xuất hiện trong toàn bộ bộ lọc và phiếu tiếp đón bệnh nhân</p>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-slate-600 mb-1">
+                                        Danh mục nhóm dịch vụ điều trị (cách nhau bởi dấu phẩy)
+                                    </label>
+                                    <input type="text" id="cfg-categories" required
+                                           class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold focus:bg-white focus:border-teal-500 outline-none text-sm"
+                                           placeholder="Tổng quát, Nhổ răng, Điều trị tủy, Răng giả, Chỉnh nha, Implant">
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-slate-600 mb-1">
+                                        Danh sách Bác sĩ phụ trách (cách nhau bởi dấu phẩy)
+                                    </label>
+                                    <input type="text" id="cfg-dentists" required
+                                           class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold focus:bg-white focus:border-teal-500 outline-none text-sm"
+                                           placeholder="Thắng">
+                                </div>
+                            </div>
+
+                            <div class="pt-4 flex items-center justify-end">
+                                <button type="submit" id="btn-save-settings" class="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold rounded-xl text-xs shadow-md shadow-teal-600/30 flex items-center gap-2 transition">
+                                    <i class="fa-solid fa-floppy-disk"></i>
+                                    <span>Lưu toàn bộ cài đặt ứng dụng</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- SUB-TAB 4: BACKUP & AUDIT LOGS -->
+                <div id="admin-sub-view-backup" class="hidden space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Safe Database Backup -->
+                        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-3">
+                            <div>
+                                <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg mb-2">
+                                    <i class="fa-solid fa-database"></i>
+                                </div>
+                                <h4 class="font-extrabold text-slate-800 text-sm">Sao Lưu Dữ Liệu Phòng Khám Toàn Diện</h4>
+                                <p class="text-xs text-slate-500 mt-1">Tải về toàn bộ cơ sở dữ liệu SQLite (.db) bao gồm tất cả bệnh nhân, đợt điều trị, công nợ và lịch hẹn để cất giữ an toàn.</p>
+                            </div>
+                            <button onclick="downloadBackupDatabase()" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 flex items-center justify-center gap-2 transition">
+                                <i class="fa-solid fa-download"></i>
+                                <span>Tải file sao lưu CSDL (.db) ngay</span>
+                            </button>
+                        </div>
+
+                        <!-- Data Export to CSV -->
+                        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-3">
+                            <div>
+                                <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg mb-2">
+                                    <i class="fa-solid fa-file-excel"></i>
+                                </div>
+                                <h4 class="font-extrabold text-slate-800 text-sm">Xuất Dữ Liệu Ra Bảng Tính Excel/CSV</h4>
+                                <p class="text-xs text-slate-500 mt-1">Xuất toàn bộ danh sách bệnh nhân và sổ công nợ ra file Excel để in ấn hoặc báo cáo ngoại kiểm.</p>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button onclick="exportPatientsCsv()" class="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5">
+                                    <i class="fa-solid fa-users"></i>
+                                    <span>Hồ sơ BN</span>
+                                </button>
+                                <button onclick="exportDebtsCsv()" class="py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5">
+                                    <i class="fa-solid fa-hand-holding-dollar"></i>
+                                    <span>Sổ nợ</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Audit Trail Section -->
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h4 class="font-extrabold text-slate-800 text-sm">Nhật Ký Kiểm Tra Giám Sát (Audit Log)</h4>
+                                <p class="text-xs text-slate-400">Ghi lại vết mọi thao tác sửa tiền, đổi bệnh án và xóa hồ sơ</p>
+                            </div>
+                            <button onclick="loadAuditLogs()" class="p-1.5 text-slate-400 hover:text-teal-600 rounded-lg hover:bg-slate-100">
+                                <i class="fa-solid fa-rotate-right text-xs"></i>
+                            </button>
+                        </div>
+                        <div id="audit-logs-container" class="space-y-2.5 max-h-96 overflow-y-auto custom-scrollbar">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- ==================== MOBILE BOTTOM NAVIGATION ==================== -->
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-2 py-1.5 flex items-center justify-around z-20 shadow-lg">
+        <button onclick="switchTab('dashboard')" data-tab-btn="dashboard" class="admin-only mobile-nav-btn flex flex-col items-center gap-1 p-1 text-teal-600">
+            <i class="fa-solid fa-chart-pie text-base"></i>
+            <span class="text-[10px] font-bold">Tổng quan</span>
+        </button>
+        <button onclick="switchTab('patients')" data-tab-btn="patients" class="mobile-nav-btn flex flex-col items-center gap-1 p-1 text-slate-400">
+            <i class="fa-solid fa-users text-base"></i>
+            <span class="text-[10px] font-medium">Bệnh nhân</span>
+        </button>
+        <button onclick="openPatientModal()" class="flex flex-col items-center -mt-5">
+            <div class="w-12 h-12 rounded-full bg-teal-600 text-white flex items-center justify-center text-xl shadow-lg shadow-teal-600/40 border-4 border-white active:scale-95 transition">
+                <i class="fa-solid fa-plus"></i>
+            </div>
+            <span class="text-[10px] font-bold text-teal-600 mt-0.5">Tiếp đón</span>
+        </button>
+        <button onclick="switchTab('debts')" data-tab-btn="debts" class="mobile-nav-btn flex flex-col items-center gap-1 p-1 text-slate-400 relative">
+            <i class="fa-solid fa-hand-holding-dollar text-base"></i>
+            <span class="text-[10px] font-medium">Sổ nợ</span>
+            <span id="mobile-badge-debt" class="hidden absolute top-0 right-1 w-2 h-2 rounded-full bg-rose-500"></span>
+        </button>
+        <button onclick="switchTab('appointments')" data-tab-btn="appointments" class="mobile-nav-btn flex flex-col items-center gap-1 p-1 text-slate-400 relative">
+            <i class="fa-solid fa-calendar-check text-base"></i>
+            <span class="text-[10px] font-medium">Lịch hẹn</span>
+            <span id="mobile-badge-appt" class="hidden absolute top-0 right-1 w-2 h-2 rounded-full bg-teal-500"></span>
+        </button>
+    </nav>
+
+    <!-- ================================================================= -->
+    <!-- ==================== MODALS & DRAWERS ============================ -->
+    <!-- ================================================================= -->
+
+    <!-- 1. PATIENT INTAKE MODAL (NO ENTER SUBMIT + INTEGRATED FIRST TREATMENT) -->
+    <div id="patient-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-3 md:p-4 overflow-y-auto">
+        <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-100 overflow-hidden my-auto max-h-[92vh] flex flex-col">
+            <!-- Modal Header -->
+            <div class="bg-gradient-to-r from-teal-600 to-teal-700 px-5 py-4 text-white flex items-center justify-between flex-shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
+                        <i class="fa-solid fa-user-plus text-sm"></i>
+                    </div>
+                    <div>
+                        <h3 id="patient-modal-title" class="font-bold text-base">Tiếp Đón Bệnh Nhân Mới</h3>
+                        <p class="text-teal-100 text-xs">Điền thông tin hành chính & có thể nhập luôn đợt điều trị đầu tiên</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closePatientModal()" class="text-white/80 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Modal Form Body -->
+            <form id="patient-form" class="p-5 overflow-y-auto custom-scrollbar space-y-4 flex-1">
+                <input type="hidden" id="pm-id" value="">
+
+                <!-- Section: Hành chính -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Họ và tên bệnh nhân <span class="text-rose-500">*</span></label>
+                        <input type="text" id="pm-name" required
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none transition text-sm"
+                               placeholder="Ví dụ: Nguyễn Văn A">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Số điện thoại</label>
+                        <input type="tel" id="pm-phone"
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none transition text-sm"
+                               placeholder="Ví dụ: 0912345678">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Năm sinh</label>
+                        <input type="number" id="pm-yob" oninput="syncAgeFromYob()" min="1920" max="2026"
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none transition text-sm"
+                               placeholder="1995">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Tuổi</label>
+                        <input type="number" id="pm-age" oninput="syncYobFromAge()" min="0" max="110"
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none transition text-sm"
+                               placeholder="31">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Cơ sở khám <span class="text-rose-500">*</span></label>
+                        <select id="pm-branch" required
+                                class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none transition text-sm">
+                            <option value="Ninh Vân">Ninh Vân</option>
+                            <option value="Phố Dâu">Phố Dâu</option>
+                            <option value="Cửu Yên">Cửu Yên</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-xs font-bold uppercase text-slate-500">Địa chỉ / Quê quán</label>
+                        <span class="text-[10px] text-teal-600 font-semibold flex items-center gap-1">
+                            <i class="fa-solid fa-clock-rotate-left text-[9px]"></i>
+                            <span>Bấm gợi ý nhanh hoặc gõ để tự điền</span>
+                        </span>
+                    </div>
+                    <div class="relative">
+                        <i class="fa-solid fa-location-dot absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                        <input type="text" id="pm-address" list="address-suggestions" autocomplete="off"
+                               class="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none transition text-sm"
+                               placeholder="Gõ để gợi ý hoặc bấm chọn nhanh bên dưới...">
+                        <datalist id="address-suggestions">
+                            <!-- Populated dynamically with address history -->
+                        </datalist>
+                    </div>
+                    <!-- Quick Address History Chips -->
+                    <div id="quick-address-chips" class="flex items-center gap-1.5 mt-2 flex-wrap">
+                        <!-- Populated dynamically with top historical addresses -->
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Tiền sử bệnh lý (dị ứng, tim mạch...)</label>
+                        <input type="text" id="pm-history"
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none transition text-sm"
+                               placeholder="Không có hoặc ghi rõ dị ứng thuốc tê...">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Ghi chú thêm</label>
+                        <input type="text" id="pm-notes"
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none transition text-sm"
+                               placeholder="Ghi chú riêng về bệnh nhân...">
+                    </div>
+                </div>
+
+                <!-- Section: FIRST TREATMENT TOGGLE (User Request) -->
+                <div id="pm-first-treatment-container" class="mt-4 pt-4 border-t border-slate-200">
+                    <label class="flex items-center gap-2 cursor-pointer select-none bg-teal-50/70 border border-teal-200/80 p-3 rounded-xl mb-3">
+                        <input type="checkbox" id="pm-enable-treatment" onchange="toggleFirstTreatmentFields()" checked class="w-4 h-4 text-teal-600 rounded">
+                        <div>
+                            <span class="text-xs font-bold text-teal-900 block">⚡ Nhập luôn dữ liệu đợt điều trị đầu tiên</span>
+                            <span class="text-[11px] text-teal-700">Tiết kiệm thao tác, lưu hồ sơ xong không phải mở form điều trị thêm lần nữa</span>
+                        </div>
+                    </label>
+
+                    <div id="pm-treatment-fields" class="space-y-3 bg-slate-50/80 p-4 rounded-xl border border-slate-200">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Ngày khám</label>
+                                <input type="date" id="pm-t-date"
+                                       class="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-800 text-xs font-medium">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Nhóm dịch vụ</label>
+                                <select id="pm-t-cat" onchange="updateCategoryRecallHint(this.value, 'pm-t-hint')" class="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-800 text-xs font-medium">
+                                    <option value="Tổng quát">Tổng quát</option>
+                                    <option value="Nhổ răng">Nhổ răng</option>
+                                    <option value="Điều trị tủy">Điều trị tủy</option>
+                                    <option value="Răng giả">Răng giả</option>
+                                    <option value="Chỉnh nha">Chỉnh nha</option>
+                                    <option value="Implant">Implant</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Bác sĩ điều trị</label>
+                                <select id="pm-t-dentist"
+                                        class="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-800 text-xs font-semibold focus:ring-2 focus:ring-teal-500">
+                                    <option value="Thắng">BS. Thắng</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div class="md:col-span-2">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Nội dung thủ thuật điều trị <span class="text-rose-500">*</span></label>
+                                <input type="text" id="pm-t-proc"
+                                       class="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-800 text-xs font-medium"
+                                       placeholder="Ví dụ: Lấy cao răng 2 hàm, hàn răng sâu...">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Vị trí răng</label>
+                                <input type="text" id="pm-t-tooth"
+                                       class="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-800 text-xs font-medium"
+                                       placeholder="R48, 16...">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Tổng tiền điều trị (tính theo K)</label>
+                                <div class="relative">
+                                    <input type="text" id="pm-t-cost" oninput="formatCurrencyInput(this)" onfocus="clearZeroOnFocus(this)" value="0"
+                                           class="w-full pl-2.5 pr-7 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-800 text-xs font-bold text-right"
+                                           placeholder="Ví dụ: 500">
+                                    <span class="absolute right-2 top-1/2 -translate-y-1/2 font-extrabold text-slate-400 text-xs pointer-events-none">K</span>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Đã thanh toán (tính theo K)</label>
+                                <div class="relative">
+                                    <input type="text" id="pm-t-paid" oninput="formatCurrencyInput(this)" onfocus="clearZeroOnFocus(this)" value="0"
+                                           class="w-full pl-2.5 pr-7 py-1.5 bg-white border border-slate-200 rounded-lg text-emerald-600 text-xs font-bold text-right"
+                                           placeholder="Ví dụ: 500">
+                                    <span class="absolute right-2 top-1/2 -translate-y-1/2 font-extrabold text-emerald-600 text-xs pointer-events-none">K</span>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Hình thức thanh toán</label>
+                                <select id="pm-t-method" class="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-800 text-xs font-medium">
+                                    <option value="Tiền mặt">Tiền mặt</option>
+                                    <option value="Chuyển khoản">Chuyển khoản</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Hẹn ngày tái khám (nếu có)</label>
+                            <input type="date" id="pm-t-next"
+                                   class="w-full md:w-1/2 px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-800 text-xs font-medium">
+                        </div>
+                        <p id="pm-t-hint" class="hidden text-[11px] text-teal-800 font-semibold bg-teal-50 border border-teal-200 rounded-lg p-2.5"></p>
+                    </div>
+                </div>
+
+                <div class="text-[11px] text-slate-400 italic">
+                    💡 Hệ thống chỉ lưu khi ấn nút bên dưới, không tự động lưu khi ấn Enter.
+                </div>
+            </form>
+
+            <!-- Modal Footer -->
+            <div class="bg-slate-50 border-t border-slate-200 px-5 py-3.5 flex items-center justify-end gap-2.5 flex-shrink-0">
+                <button type="button" onclick="closePatientModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-xl text-xs transition">
+                    Hủy bỏ
+                </button>
+                <button type="button" id="btn-save-patient" onclick="submitPatientForm()" class="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold rounded-xl text-xs shadow-md shadow-teal-600/30 flex items-center gap-2 transition">
+                    <i class="fa-solid fa-floppy-disk"></i>
+                    <span id="btn-save-patient-text">Lưu hồ sơ & Điều trị</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. PATIENT EMR DRAWER / DETAIL MODAL -->
+    <div id="patient-detail-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-2 md:p-4 overflow-y-auto">
+        <div class="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-slate-100 overflow-hidden my-auto max-h-[95vh] flex flex-col">
+            <!-- Header -->
+            <div class="bg-gradient-to-r from-slate-900 to-slate-800 px-5 py-4 text-white flex items-center justify-between flex-shrink-0">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-teal-500/20 border border-teal-500/40 text-teal-300 flex items-center justify-center text-lg">
+                        <i class="fa-solid fa-id-card-clip"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 id="emr-patient-name" class="font-extrabold text-base md:text-lg">--</h2>
+                            <span id="emr-patient-code" class="px-2 py-0.5 bg-teal-500/20 text-teal-300 border border-teal-500/30 text-[10px] font-bold rounded-full">BN00000</span>
+                        </div>
+                        <p id="emr-patient-sub" class="text-xs text-slate-400 mt-0.5">--</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button onclick="editCurrentPatient()" title="Sửa thông tin bệnh nhân" class="p-2 text-slate-300 hover:text-white rounded-lg hover:bg-slate-700 text-xs">
+                        <i class="fa-solid fa-pen-to-square"></i>
+                    </button>
+                    <button onclick="deleteCurrentPatient()" title="Xóa bệnh nhân (Admin)" class="admin-only p-2 text-rose-400 hover:text-rose-300 rounded-lg hover:bg-slate-700 text-xs">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                    <button onclick="closePatientDetail()" class="text-slate-400 hover:text-white p-2">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Patient Quick Stats Bar -->
+            <div class="bg-slate-100 border-b border-slate-200 px-5 py-3 grid grid-cols-2 md:grid-cols-4 gap-2 flex-shrink-0 text-xs">
+                <div>
+                    <span class="text-slate-500 block text-[10px] font-bold uppercase">Tổng chi phí</span>
+                    <span id="emr-total-billed" class="font-extrabold text-slate-800 text-sm">0K</span>
+                </div>
+                <div>
+                    <span class="text-slate-500 block text-[10px] font-bold uppercase">Đã thanh toán</span>
+                    <span id="emr-total-paid" class="font-extrabold text-emerald-600 text-sm">0K</span>
+                </div>
+                <div>
+                    <span class="text-slate-500 block text-[10px] font-bold uppercase">Còn nợ</span>
+                    <span id="emr-total-debt" class="font-extrabold text-rose-600 text-sm">0K</span>
+                </div>
+                <div class="flex items-center gap-1.5 justify-end">
+                    <button id="btn-collect-debt-fast" onclick="openCollectModal()" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-sm transition">
+                        <i class="fa-solid fa-hand-holding-dollar mr-1"></i>
+                        <span>Thu nợ</span>
+                    </button>
+                    <button onclick="openAddTreatmentModal()" class="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-sm transition">
+                        <i class="fa-solid fa-plus mr-1"></i>
+                        <span>Đợt ĐT</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- EMR Content Body -->
+            <div class="p-5 overflow-y-auto custom-scrollbar space-y-6 flex-1">
+                <!-- Administrative Info Cards -->
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                    <div>
+                        <span class="text-slate-400 block font-semibold">Số điện thoại:</span>
+                        <div id="emr-patient-phone-box" class="mt-0.5 flex items-center gap-2">
+                            <span id="emr-phone" class="font-bold text-slate-800">--</span>
+                        </div>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block font-semibold">Địa chỉ / Quê quán:</span>
+                        <span id="emr-address" class="font-bold text-slate-800 block mt-0.5">--</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block font-semibold">Tiền sử bệnh lý:</span>
+                        <span id="emr-history" class="font-bold text-slate-800 block mt-0.5">--</span>
+                    </div>
+                </div>
+
+                <!-- Treatment History -->
+                <div>
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                            <i class="fa-solid fa-teeth-open text-teal-600"></i>
+                            <span>Lịch Sử Điều Trị & Thủ Thuật</span>
+                            <span id="emr-treatments-count" class="px-2 py-0.5 text-[10px] bg-slate-200 text-slate-700 rounded-full font-bold">0</span>
+                        </h4>
+                        <button onclick="openAddTreatmentModal()" class="text-xs text-teal-600 font-bold hover:underline flex items-center gap-1">
+                            <i class="fa-solid fa-plus text-[10px]"></i>
+                            <span>Thêm đợt điều trị</span>
+                        </button>
+                    </div>
+
+                    <div id="emr-treatments-list" class="space-y-3">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Appointments History -->
+                <div>
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                            <i class="fa-solid fa-calendar-check text-teal-600"></i>
+                            <span>Lịch Hẹn & Tái Khám</span>
+                            <span id="emr-appointments-count" class="px-2 py-0.5 text-[10px] bg-slate-200 text-slate-700 rounded-full font-bold">0</span>
+                        </h4>
+                        <button onclick="openPatientAppointmentModal()" class="text-xs text-teal-600 font-bold hover:underline flex items-center gap-1">
+                            <i class="fa-solid fa-plus text-[10px]"></i>
+                            <span>Đặt lịch hẹn</span>
+                        </button>
+                    </div>
+
+                    <div id="emr-appointments-list" class="space-y-2">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. ADD / EDIT TREATMENT MODAL (NO ENTER SUBMIT) -->
+    <div id="treatment-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-3 md:p-4 overflow-y-auto">
+        <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-100 overflow-hidden my-auto max-h-[92vh] flex flex-col">
+            <div class="bg-gradient-to-r from-teal-600 to-teal-700 px-5 py-4 text-white flex items-center justify-between flex-shrink-0">
+                <h3 id="treatment-modal-title" class="font-bold text-base">Thêm Đợt Điều Trị Mới</h3>
+                <button type="button" onclick="closeTreatmentModal()" class="text-white/80 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form id="treatment-form" class="p-5 overflow-y-auto custom-scrollbar space-y-4 flex-1">
+                <input type="hidden" id="tm-id" value="">
+                <input type="hidden" id="tm-patient-id" value="">
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Ngày khám</label>
+                        <input type="date" id="tm-date" required
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-medium">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Cơ sở</label>
+                        <select id="tm-branch" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-medium">
+                            <option value="Ninh Vân">Ninh Vân</option>
+                            <option value="Phố Dâu">Phố Dâu</option>
+                            <option value="Cửu Yên">Cửu Yên</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Nhóm dịch vụ</label>
+                        <select id="tm-category" onchange="updateCategoryRecallHint(this.value, 'tm-t-hint')" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-medium">
+                            <option value="Tổng quát">Tổng quát</option>
+                            <option value="Nhổ răng">Nhổ răng</option>
+                            <option value="Điều trị tủy">Điều trị tủy</option>
+                            <option value="Răng giả">Răng giả</option>
+                            <option value="Chỉnh nha">Chỉnh nha</option>
+                            <option value="Implant">Implant</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Bác sĩ điều trị</label>
+                        <select id="tm-dentist"
+                                class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-semibold focus:ring-2 focus:ring-teal-500">
+                            <option value="Thắng">BS. Thắng</option>
+                        </select>
+                    </div>
+                </div>
+                <p id="tm-t-hint" class="hidden text-[11px] text-teal-800 font-semibold bg-teal-50 border border-teal-200 rounded-lg p-2.5"></p>
+
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Nội dung thủ thuật điều trị <span class="text-rose-500">*</span></label>
+                    <input type="text" id="tm-procedure" required
+                           class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold text-xs"
+                           placeholder="Ví dụ: Hàn răng sâu composite, Nhổ răng 8 ngầm...">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Vị trí răng</label>
+                        <input type="text" id="tm-tooth"
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-medium"
+                               placeholder="Ví dụ: R48, 16...">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Tổng tiền điều trị (tính theo K) <span class="text-rose-500">*</span></label>
+                        <div class="relative">
+                            <input type="text" id="tm-cost" oninput="formatCurrencyInput(this)" onfocus="clearZeroOnFocus(this)" value="0" required
+                                   class="w-full pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-bold text-right text-sm"
+                                   placeholder="Ví dụ: 500">
+                            <span class="absolute right-3 top-1/2 -translate-y-1/2 font-extrabold text-slate-400 text-sm pointer-events-none">K</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Create Mode Payment Section -->
+                <div id="tm-pay-section" class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Thanh toán ngay (tính theo K)</label>
+                            <div class="relative">
+                                <input type="text" id="tm-paid" oninput="formatCurrencyInput(this)" onfocus="clearZeroOnFocus(this)" value="0"
+                                       class="w-full pl-3 pr-7 py-2 bg-white border border-slate-200 rounded-xl text-emerald-600 font-bold text-right text-xs"
+                                       placeholder="Ví dụ: 500">
+                                <span class="absolute right-2.5 top-1/2 -translate-y-1/2 font-extrabold text-emerald-600 text-xs pointer-events-none">K</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Hình thức</label>
+                            <select id="tm-method" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-800 text-xs font-medium">
+                                <option value="Tiền mặt">Tiền mặt</option>
+                                <option value="Chuyển khoản">Chuyển khoản</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Hẹn ngày tái khám</label>
+                        <input type="date" id="tm-next-date"
+                               class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-800 text-xs font-medium">
+                    </div>
+                </div>
+
+                <!-- Edit Mode Reason Section -->
+                <div id="tm-edit-reason-section" class="hidden">
+                    <label class="block text-xs font-bold uppercase text-amber-600 mb-1">Lý do điều chỉnh (sẽ ghi vào nhật ký)</label>
+                    <input type="text" id="tm-reason"
+                           class="w-full px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs font-medium"
+                           placeholder="Ví dụ: Giảm giá theo thỏa thuận, gõ nhầm số...">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Ghi chú điều trị</label>
+                    <textarea id="tm-notes" rows="2"
+                              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-medium"
+                              placeholder="Chi tiết vật liệu, tình trạng men răng..."></textarea>
+                </div>
+            </form>
+
+            <div class="bg-slate-50 border-t border-slate-200 px-5 py-3.5 flex items-center justify-end gap-2.5 flex-shrink-0">
+                <button type="button" onclick="closeTreatmentModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-xl text-xs transition">
+                    Hủy bỏ
+                </button>
+                <button type="button" onclick="submitTreatmentForm()" class="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-xs shadow-md transition">
+                    <i class="fa-solid fa-floppy-disk mr-1"></i>
+                    <span>Lưu đợt điều trị</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. COLLECT DEBT MODAL (FIFO AUTO-APPLY) -->
+    <div id="collect-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 overflow-y-auto">
+        <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-100 overflow-hidden my-auto flex flex-col">
+            <div class="bg-gradient-to-r from-rose-600 to-rose-700 px-5 py-4 text-white flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-hand-holding-dollar text-lg"></i>
+                    <h3 class="font-bold text-base">Thu Tiền Nợ Cũ</h3>
+                </div>
+                <button type="button" onclick="closeCollectModal()" class="text-white/80 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form id="collect-form" class="p-5 space-y-4">
+                <input type="hidden" id="col-patient-id" value="">
+
+                <div>
+                    <p class="text-xs text-slate-500">Bệnh nhân:</p>
+                    <p id="col-patient-name" class="font-extrabold text-slate-800 text-base">--</p>
+                    <div class="mt-1 p-2.5 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between">
+                        <span class="text-xs text-rose-700 font-semibold">Tổng nợ còn lại:</span>
+                        <span id="col-patient-debt" class="text-sm font-extrabold text-rose-700">0K</span>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Số tiền thu đợt này (tính theo K) <span class="text-rose-500">*</span></label>
+                    <div class="relative">
+                        <input type="text" id="col-amount" oninput="formatCurrencyInput(this)" onfocus="clearZeroOnFocus(this)" required
+                               class="w-full pl-3 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-rose-600 font-extrabold text-lg text-right focus:bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-200 outline-none"
+                               placeholder="0">
+                        <span class="absolute right-3.5 top-1/2 -translate-y-1/2 font-extrabold text-rose-400 text-base pointer-events-none">K</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 mt-2 flex-wrap">
+                        <button type="button" onclick="setQuickCollect('all')" class="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 text-xs font-bold rounded-lg transition">Thu hết nợ</button>
+                        <button type="button" onclick="setQuickCollect(200)" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-lg transition">+200K</button>
+                        <button type="button" onclick="setQuickCollect(500)" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-lg transition">+500K</button>
+                        <button type="button" onclick="setQuickCollect(1000)" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-lg transition">+1.000K</button>
+                        <button type="button" onclick="setQuickCollect(2000)" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-lg transition">+2.000K</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Hình thức</label>
+                        <select id="col-method" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-medium">
+                            <option value="Tiền mặt">Tiền mặt</option>
+                            <option value="Chuyển khoản">Chuyển khoản</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Ghi chú thu nợ</label>
+                        <input type="text" id="col-note" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-medium" placeholder="Thu nợ chỉnh nha...">
+                    </div>
+                </div>
+
+                <p class="text-[11px] text-slate-400 italic">
+                    ℹ️ Hệ thống sẽ tự động cấn trừ theo thứ tự đợt điều trị cũ nhất trước (FIFO).
+                </p>
+            </form>
+
+            <div class="bg-slate-50 border-t border-slate-200 px-5 py-3.5 flex items-center justify-end gap-2.5">
+                <button type="button" onclick="closeCollectModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-xl text-xs transition">Hủy</button>
+                <button type="button" onclick="submitCollectDebt()" class="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs shadow-md transition">
+                    <i class="fa-solid fa-check mr-1"></i>
+                    <span>Xác nhận thu nợ</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. APPOINTMENT MODAL -->
+    <div id="appointment-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 overflow-y-auto">
+        <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-100 overflow-hidden my-auto flex flex-col">
+            <div class="bg-gradient-to-r from-teal-600 to-teal-700 px-5 py-4 text-white flex items-center justify-between">
+                <h3 class="font-bold text-base">Đặt Lịch Hẹn / Tái Khám</h3>
+                <button type="button" onclick="closeAppointmentModal()" class="text-white/80 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form id="appointment-form" class="p-5 space-y-3.5">
+                <input type="hidden" id="apptm-patient-id" value="">
+
+                <div id="apptm-patient-select-box">
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Chọn bệnh nhân</label>
+                    <input type="text" id="apptm-patient-search" oninput="searchAppointmentPatient(this.value)"
+                           class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-medium"
+                           placeholder="Nhập tên bệnh nhân...">
+                    <div id="apptm-patient-results" class="hidden max-h-32 overflow-y-auto custom-scrollbar border border-slate-200 rounded-xl mt-1 bg-white divide-y divide-slate-100 text-xs"></div>
+                </div>
+
+                <div class="p-2.5 bg-teal-50 border border-teal-200 rounded-xl flex items-center justify-between text-xs">
+                    <span class="text-teal-700 font-semibold">Bệnh nhân:</span>
+                    <span id="apptm-patient-chosen" class="font-bold text-teal-900">Chưa chọn</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Loại lịch</label>
+                        <select id="apptm-kind" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-medium">
+                            <option value="tai_kham">Tái khám</option>
+                            <option value="hen_kham">Hẹn khám mới</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Cơ sở</label>
+                        <select id="apptm-branch" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-medium">
+                            <option value="Ninh Vân">Ninh Vân</option>
+                            <option value="Phố Dâu">Phố Dâu</option>
+                            <option value="Cửu Yên">Cửu Yên</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Ngày hẹn <span class="text-rose-500">*</span></label>
+                        <input type="date" id="apptm-date" required
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-medium">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Giờ hẹn (tùy chọn)</label>
+                        <input type="time" id="apptm-time"
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-medium">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Nội dung / Lý do hẹn</label>
+                    <input type="text" id="apptm-reason"
+                           class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-medium"
+                           placeholder="Ví dụ: Thay chun chỉnh nha, kiểm tra vết nhổ...">
+                </div>
+            </form>
+
+            <div class="bg-slate-50 border-t border-slate-200 px-5 py-3.5 flex items-center justify-end gap-2.5">
+                <button type="button" onclick="closeAppointmentModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-xl text-xs transition">Hủy</button>
+                <button type="button" onclick="submitAppointmentForm()" class="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-xs shadow-md transition">
+                    <i class="fa-solid fa-calendar-check mr-1"></i>
+                    <span>Lưu lịch hẹn</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. PIN PROMPT MODAL (FOR STAFF EDITING) -->
+    <div id="pin-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4">
+        <div class="bg-white w-full max-w-xs rounded-2xl shadow-2xl border border-slate-100 overflow-hidden text-center p-5 space-y-4">
+            <div class="w-12 h-12 mx-auto rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xl">
+                <i class="fa-solid fa-shield-halved"></i>
+            </div>
+            <div>
+                <h4 class="font-bold text-slate-800 text-base">Xác Thực Mã PIN</h4>
+                <p id="pin-modal-prompt" class="text-xs text-slate-500 mt-1">Nhập PIN nhân viên để thực hiện thay đổi (mặc định: 0000)</p>
+            </div>
+            <input type="password" id="pin-input" maxlength="4" autofocus
+                   class="w-32 mx-auto text-center tracking-[0.5em] text-2xl font-bold py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-200 outline-none"
+                   placeholder="••••">
+            <div class="flex items-center justify-center gap-2 pt-2">
+                <button type="button" onclick="cancelPinPrompt()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-xl text-xs transition">Hủy</button>
+                <button type="button" onclick="confirmPinPrompt()" class="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs transition shadow-sm">Xác nhận</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 7. ADMIN PASSWORD CONFIRM MODAL (FOR DELETIONS) -->
+    <div id="admin-pw-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+        <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl border border-slate-100 overflow-hidden text-center p-6 space-y-4">
+            <div class="w-14 h-14 mx-auto rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center text-2xl">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <div>
+                <h4 class="font-bold text-slate-800 text-base">Xác Nhận Quyền Admin</h4>
+                <p id="admin-pw-prompt" class="text-xs text-rose-600 font-medium mt-1">Hành động này không thể hoàn tác. Nhập mật khẩu admin (123456) để tiếp tục:</p>
+            </div>
+            <input type="password" id="admin-pw-input" autofocus
+                   class="w-full text-center py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 font-bold focus:bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-200 outline-none text-sm"
+                   placeholder="Nhập mật khẩu admin">
+            <div class="flex items-center justify-center gap-2 pt-2">
+                <button type="button" onclick="cancelAdminPwPrompt()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-xl text-xs transition">Hủy</button>
+                <button type="button" onclick="confirmAdminPwPrompt()" class="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs transition shadow-md">Đồng ý thực hiện</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 8. CHANGE PASSWORD MODAL -->
+    <div id="change-pw-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4">
+        <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl border border-slate-100 overflow-hidden p-5 space-y-3.5">
+            <h4 class="font-bold text-slate-800 text-base text-center">Đổi Mật Khẩu Đăng Nhập</h4>
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Mật khẩu hiện tại</label>
+                <input type="password" id="cpw-old" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Mật khẩu mới (tối thiểu 6 ký tự)</label>
+                <input type="password" id="cpw-new" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-2">
+                <button type="button" onclick="closeChangePasswordModal()" class="px-4 py-2 bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs">Hủy</button>
+                <button type="button" onclick="submitChangePassword()" class="px-4 py-2 bg-teal-600 text-white font-bold rounded-xl text-xs">Cập nhật</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 9. CHANGE EDIT PIN MODAL (ADMIN ONLY) -->
+    <div id="admin-pin-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4">
+        <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl border border-slate-100 overflow-hidden p-5 space-y-3.5">
+            <h4 class="font-bold text-slate-800 text-base text-center">Đổi Mã PIN Nhân Viên</h4>
+            <p class="text-xs text-slate-500 text-center">Nhập mật khẩu Admin và 4 chữ số PIN mới</p>
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Mật khẩu Admin (123456)</label>
+                <input type="password" id="cpin-pw" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Mã PIN 4 số mới</label>
+                <input type="password" id="cpin-new" maxlength="4" class="w-full text-center tracking-[0.5em] px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold" placeholder="••••">
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-2">
+                <button type="button" onclick="closePinAdminModal()" class="px-4 py-2 bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs">Hủy</button>
+                <button type="button" onclick="submitAdminPin()" class="px-4 py-2 bg-amber-600 text-white font-bold rounded-xl text-xs">Lưu PIN mới</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 10. CREATE / EDIT USER MODAL (ADMIN ONLY) -->
+    <div id="user-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4">
+        <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col">
+            <div class="bg-gradient-to-r from-teal-600 to-teal-700 px-5 py-4 text-white flex items-center justify-between">
+                <h4 id="user-modal-title" class="font-bold text-base">Tạo Tài Khoản Nhân Viên</h4>
+                <button type="button" onclick="closeUserModal()" class="text-white/80 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <form id="user-form" onsubmit="event.preventDefault(); submitUserForm();" class="p-5 space-y-3.5">
+                <input type="hidden" id="um-id" value="">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Tên đăng nhập <span class="text-rose-500">*</span></label>
+                    <input type="text" id="um-username" required pattern="^[A-Za-z0-9_.-]{3,30}$"
+                           class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                           placeholder="Ví dụ: letan_mai, bs_duc">
+                    <p class="text-[10px] text-slate-400 mt-0.5">3-30 ký tự (chữ cái, số, gạch nối)</p>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Họ và tên nhân viên <span class="text-rose-500">*</span></label>
+                    <input type="text" id="um-fullname" required
+                           class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold"
+                           placeholder="Ví dụ: Lê Thị Mai (Lễ tân)">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Mật khẩu <span id="um-pw-required" class="text-rose-500">*</span></label>
+                    <input type="password" id="um-password"
+                           class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
+                           placeholder="Tối thiểu 6 ký tự">
+                    <p id="um-pw-hint" class="hidden text-[10px] text-slate-400 mt-0.5 italic">Để trống nếu không đổi mật khẩu</p>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Vai trò cấp quyền</label>
+                    <select id="um-role" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold">
+                        <option value="staff">Nhân viên lễ tân / Trợ thủ (Quyền nhân viên)</option>
+                        <option value="admin">Quản trị viên (Toàn quyền quản lý)</option>
+                    </select>
+                </div>
+                <div id="um-active-box" class="hidden pt-1">
+                    <label class="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer select-none">
+                        <input type="checkbox" id="um-active" checked class="w-4 h-4 text-teal-600 rounded">
+                        <span>Tài khoản được phép đăng nhập hoạt động</span>
+                    </label>
+                </div>
+                <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                    <button type="button" onclick="closeUserModal()" class="px-4 py-2 bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs">Hủy</button>
+                    <button type="submit" id="btn-save-user" class="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-xs shadow-md">Lưu tài khoản</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 11. ADMIN SILENT NOTIFICATIONS MODAL (ADMIN ONLY) -->
+    <div id="admin-alerts-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-3 md:p-4">
+        <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="bg-gradient-to-r from-slate-900 to-amber-950 px-5 py-4 text-white flex items-center justify-between flex-shrink-0 border-b border-amber-500/20">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center text-lg shadow-inner">
+                        <i class="fa-solid fa-bell"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 class="font-extrabold text-base text-white">Cảnh Báo Sửa Đổi Bệnh Án</h3>
+                            <span class="px-2 py-0.5 bg-amber-500 text-slate-950 font-extrabold text-[10px] rounded-full uppercase">Admin Bí Mật</span>
+                        </div>
+                        <p class="text-xs text-amber-200/80 mt-0.5">Mọi thao tác nhân viên sửa tiền, đổi bệnh án đều được ghi lại bí mật tại đây</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeAdminAlertsModal()" class="text-white/80 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Controls bar -->
+            <div class="bg-slate-50 border-b border-slate-100 px-5 py-2.5 flex items-center justify-between flex-shrink-0 text-xs">
+                <div class="flex items-center gap-2">
+                    <span id="alerts-unread-counter" class="font-bold text-slate-700">0 cảnh báo chưa đọc</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="loadAdminAlerts()" class="p-1.5 text-slate-500 hover:text-teal-600 rounded-lg hover:bg-slate-200" title="Tải lại">
+                        <i class="fa-solid fa-rotate-right"></i>
+                    </button>
+                    <button type="button" onclick="markAllAdminAlertsRead()" class="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-lg transition flex items-center gap-1">
+                        <i class="fa-solid fa-check-double text-amber-600"></i>
+                        <span>Đánh dấu tất cả đã đọc</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Alerts List Container -->
+            <div id="admin-alerts-container" class="p-5 overflow-y-auto custom-scrollbar space-y-3 flex-1 bg-slate-50/50">
+                <!-- Dynamically populated -->
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div id="toast-container" class="fixed bottom-20 md:bottom-6 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-sm"></div>
+
+    <!-- App JavaScript -->
+    <script src="/static/app.js"></script>
+</body>
+</html>

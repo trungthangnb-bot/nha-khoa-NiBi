@@ -1,0 +1,9 @@
+{
+  "name": "Nha khoa NiBi - BS. Thắng",
+  "short_name": "NiBi",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a6c71",
+  "theme_color": "#0d8a8f",
+  "icons": [{ "src": "/static/logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

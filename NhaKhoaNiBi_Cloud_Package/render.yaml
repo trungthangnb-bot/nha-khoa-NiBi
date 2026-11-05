@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: nha-khoa-nibi
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    disk:
+      name: nibi-data
+      mountPath: /app/data
+      sizeGB: 1
