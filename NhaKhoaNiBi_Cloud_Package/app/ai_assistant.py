@@ -21,6 +21,8 @@ KNOWN_ADDRESSES = [
     "Mai Sơn", "Ninh Bình", "Yên Khánh", "Hoa Lư", "Gia Viễn"
 ]
 
+DEFAULT_GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
+
 def get_gemini_api_key() -> str:
     # 1. Environment variable
     key = os.environ.get("GEMINI_API_KEY", "").strip()
@@ -30,7 +32,7 @@ def get_gemini_api_key() -> str:
     try:
         with db() as conn:
             row = conn.execute("SELECT value FROM settings WHERE key = 'gemini_api_key'").fetchone()
-            if row and row[0]:
+            if row and row[0] and row[0].strip():
                 return row[0].strip()
     except Exception:
         pass
@@ -42,35 +44,37 @@ def call_gemini_api(prompt: str, system_instruction: str = "", api_key: str = ""
     if not api_key:
         return ""
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-    payload = {
-        "contents": [
-            {"role": "user", "parts": [{"text": prompt}]}
-        ],
-        "generationConfig": {
-            "temperature": 0.2,
-            "maxOutputTokens": 1024
+    candidate_models = ["gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-flash-latest"]
+    for model_name in candidate_models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+        payload = {
+            "contents": [
+                {"role": "user", "parts": [{"text": prompt}]}
+            ],
+            "generationConfig": {
+                "temperature": 0.3,
+                "maxOutputTokens": 1024
+            }
         }
-    }
-    if system_instruction:
-        payload["systemInstruction"] = {
-            "parts": [{"text": system_instruction}]
-        }
-    if json_mode:
-        payload["generationConfig"]["responseMimeType"] = "application/json"
+        if system_instruction:
+            payload["systemInstruction"] = {
+                "parts": [{"text": system_instruction}]
+            }
+        if json_mode:
+            payload["generationConfig"]["responseMimeType"] = "application/json"
 
-    data_bytes = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=data_bytes, headers={"Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            res_json = json.loads(resp.read().decode("utf-8"))
-            candidates = res_json.get("candidates", [])
-            if candidates:
-                parts = candidates[0].get("content", {}).get("parts", [])
-                if parts:
-                    return parts[0].get("text", "")
-    except Exception as e:
-        print(f"Gemini API Error: {e}")
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                res_json = json.loads(resp.read().decode("utf-8"))
+                candidates = res_json.get("candidates", [])
+                if candidates:
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    if parts:
+                        return parts[0].get("text", "")
+        except Exception as e:
+            continue
     return ""
 
 def parse_intake_fallback(text: str) -> dict:
@@ -254,6 +258,13 @@ Trả về định dạng JSON thuần túy với các trường:
                     clean_json = clean_json[:-3]
                 data = json.loads(clean_json.strip())
                 if isinstance(data, dict) and data.get("name"):
+                    fb = parse_intake_fallback(text)
+                    if not data.get("next_date") and fb.get("next_date"):
+                        data["next_date"] = fb["next_date"]
+                    if not data.get("address") and fb.get("address"):
+                        data["address"] = fb["address"]
+                    if not data.get("phone") and fb.get("phone"):
+                        data["phone"] = fb["phone"]
                     return data
             except Exception as e:
                 print(f"JSON Parse Error from Gemini: {e}")

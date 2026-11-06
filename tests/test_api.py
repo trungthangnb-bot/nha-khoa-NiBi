@@ -357,12 +357,12 @@ class ApiTest(unittest.TestCase):
         # 2. Admin asking for revenue -> ALLOWED
         res_admin_rev = self.c.post("/api/ai/chat", json={"message": "Doanh thu tháng này thế nào?"}, headers=self.admin)
         self.assertEqual(res_admin_rev.status_code, 200)
-        self.assertIn("Doanh Thu", res_admin_rev.json()["reply"])
+        self.assertIn("doanh thu", res_admin_rev.json()["reply"].lower())
 
         # 3. Staff asking for debt -> ALLOWED
         res_debt = self.c.post("/api/ai/chat", json={"message": "Cho tôi danh sách ai đang nợ"}, headers=self.staff)
         self.assertEqual(res_debt.status_code, 200)
-        self.assertIn("Nợ", res_debt.json()["reply"])
+        self.assertIn("nợ", res_debt.json()["reply"].lower())
 
         # 4. Staff asking for patient info -> ALLOWED
         res_pat = self.c.post("/api/ai/chat", json={"message": "thông tin bệnh nhân Lan"}, headers=self.staff)
