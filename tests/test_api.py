@@ -317,6 +317,23 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(res_query.status_code, 200)
         self.assertGreater(len(res_query.content), 1000)
 
+    def test_67_export_excel_workbook(self):
+        # 1. Staff is forbidden
+        res_staff = self.c.get("/api/admin/export-excel.xlsx", headers=self.staff)
+        self.assertEqual(res_staff.status_code, 403)
+
+        # 2. Admin download succeeds and returns valid xlsx
+        res_admin = self.c.get("/api/admin/export-excel.xlsx", headers=self.admin)
+        self.assertEqual(res_admin.status_code, 200)
+        self.assertEqual(res_admin.headers["content-type"], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        self.assertGreater(len(res_admin.content), 10000)
+
+        # 3. Query token also succeeds
+        admin_token = self.admin["Authorization"].split()[1]
+        res_q = self.c.get(f"/api/export/quan-ly-nibi-2026.xlsx?token={admin_token}")
+        self.assertEqual(res_q.status_code, 200)
+        self.assertGreater(len(res_q.content), 10000)
+
     def test_99_logout_invalidates_token(self):
         h = self.login("letan", "abc123")
         self.assertEqual(self.c.post("/api/auth/logout", headers=h).status_code, 200)

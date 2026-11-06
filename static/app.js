@@ -2304,6 +2304,36 @@ async function openPatientDetailFromAlert(pid) {
 }
 
 // ───────── Admin Sub-Tab: Safe Database Backup ─────────
+async function downloadNibiExcelFull() {
+    try {
+        showToast('Đang tạo file Excel NiBi 2026 chuẩn 6 sheet...', 'info');
+        const resp = await fetch('/api/admin/export-excel.xlsx', {
+            headers: { 'Authorization': `Bearer ${state.token}` }
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || 'Không thể tạo file Excel');
+        }
+        const blob = await resp.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const today = new Date().toISOString().split('T')[0];
+        a.download = `Quan_Ly_PK_NiBi_2026_${today}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        showToast('Đã tải thành công file Excel Quản Lý NiBi 2026!', 'success');
+    } catch (e) {
+        if (state.token) {
+            window.location.href = `/api/admin/export-excel.xlsx?token=${encodeURIComponent(state.token)}`;
+        } else {
+            showToast(e.message || 'Lỗi khi tải bảng tính Excel', 'error');
+        }
+    }
+}
+
 async function downloadBackupDatabase() {
     try {
         showToast('Đang tạo và tải file sao lưu CSDL (.db)...', 'info');

@@ -841,6 +841,24 @@
 
                 <!-- SUB-TAB 4: BACKUP & AUDIT LOGS -->
                 <div id="admin-sub-view-backup" class="hidden space-y-4">
+                    <!-- Featured: Full NiBi 2026 Excel Export -->
+                    <div class="bg-gradient-to-r from-teal-800 to-teal-950 p-5 rounded-2xl border border-teal-700 shadow-md text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                        <div class="space-y-1 max-w-xl">
+                            <div class="flex items-center gap-2">
+                                <span class="px-2.5 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/40 text-[10px] font-extrabold uppercase tracking-wider">Chuẩn Mẫu NiBi 2026</span>
+                                <span class="text-xs text-amber-300 font-semibold">★ Khuyên Dùng</span>
+                            </div>
+                            <h4 class="font-extrabold text-base md:text-lg">Xuất Bảng Tính Excel Quản Lý NiBi 2026 (.xlsx)</h4>
+                            <p class="text-xs text-teal-100/90 leading-relaxed">
+                                Tải về file Excel chuẩn đẹp y hệt bản quản lý ban đầu: Gồm đầy đủ các sheet <b>Dữ liệu nhập</b> (chi tiết từng ca), <b>CÒN NỢ</b>, <b>Hẹn BN</b>, <b>Răng giả - Chỉnh nha</b>, <b>Danh Sách Bệnh Nhân</b> và <b>Doanh Thu</b>. Mở bằng Excel trên máy tính cực kỳ rõ ràng, dễ đọc, có sẵn màu sắc và định dạng số tiền theo K.
+                            </p>
+                        </div>
+                        <button onclick="downloadNibiExcelFull()" class="w-full md:w-auto px-5 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-extrabold rounded-xl shadow-lg shadow-teal-900/40 text-xs md:text-sm flex items-center justify-center gap-2 transition flex-shrink-0 active:scale-95">
+                            <i class="fa-solid fa-file-excel text-base"></i>
+                            <span>Tải Bảng Excel NiBi 2026 (.xlsx)</span>
+                        </button>
+                    </div>
+
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <!-- Safe Database Backup -->
                         <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-3">
@@ -848,12 +866,12 @@
                                 <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg mb-2">
                                     <i class="fa-solid fa-database"></i>
                                 </div>
-                                <h4 class="font-extrabold text-slate-800 text-sm">Sao Lưu Dữ Liệu Phòng Khám Toàn Diện</h4>
-                                <p class="text-xs text-slate-500 mt-1">Tải về toàn bộ cơ sở dữ liệu SQLite (.db) bao gồm tất cả bệnh nhân, đợt điều trị, công nợ và lịch hẹn để cất giữ an toàn.</p>
+                                <h4 class="font-extrabold text-slate-800 text-sm">Sao Lưu File CSDL Gốc (.db)</h4>
+                                <p class="text-xs text-slate-500 mt-1">Tải về toàn bộ cơ sở dữ liệu SQLite (.db) bao gồm tất cả bảng dữ liệu. File này dùng cho kỹ thuật viên hoặc máy chủ phục hồi dữ liệu khi cần.</p>
                             </div>
                             <button onclick="downloadBackupDatabase()" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 flex items-center justify-center gap-2 transition">
                                 <i class="fa-solid fa-download"></i>
-                                <span>Tải file sao lưu CSDL (.db) ngay</span>
+                                <span>Tải file sao lưu CSDL (.db)</span>
                             </button>
                         </div>
 

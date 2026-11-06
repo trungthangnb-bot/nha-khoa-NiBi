@@ -12,12 +12,13 @@ from typing import Optional
 
 from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import db as dbm
 from .db import APPT_KINDS, APPT_STATUSES, BRANCHES, CATEGORIES, METHODS, db, patient_search_text
+from .excel_exporter import generate_nibi_excel_workbook
 from .security import Limiter, hash_secret, new_token, token_digest, verify_secret
 from .textutil import clean, strip_accents
 
@@ -1192,6 +1193,19 @@ def download_backup_db(user=Depends(admin_only)):
         raise HTTPException(404, "Không tìm thấy file CSDL")
     filename = f"NiBi_Dental_Backup_{dt.date.today().isoformat()}.db"
     return FileResponse(dbm.DB_PATH, filename=filename, media_type="application/octet-stream")
+
+
+@app.get("/api/admin/export-excel.xlsx")
+@app.get("/api/export/quan-ly-nibi-2026.xlsx")
+def download_nibi_excel_full(user=Depends(admin_only)):
+    bio = generate_nibi_excel_workbook()
+    today_str = dt.date.today().isoformat()
+    filename = f"Quan_Ly_PK_NiBi_2026_{today_str}.xlsx"
+    return StreamingResponse(
+        bio,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 
 # ───────────────────────── static ─────────────────────────
