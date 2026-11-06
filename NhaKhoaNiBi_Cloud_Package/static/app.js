@@ -29,6 +29,28 @@ function formatVND(val) {
     return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(inK) + 'K';
 }
 
+function formatMoneyK(val) {
+    return formatVND(val);
+}
+
+function formatDateVN(dateStr) {
+    if (!dateStr) return '';
+    const clean = String(dateStr).split('T')[0];
+    const parts = clean.split('-');
+    if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return String(dateStr);
+}
+
+function getTodayDateStr() {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 function parseK(str) {
     if (!str) return 0;
     let s = String(str).trim().toLowerCase().replace(/k/g, '');
@@ -712,7 +734,7 @@ function closeTodayVisitsModal() {
 
 function setTodayVisitsToCurrentDate() {
     const dateInput = document.getElementById('tv-filter-date');
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getTodayDateStr();
     if (dateInput) dateInput.value = todayStr;
     const searchInput = document.getElementById('tv-search');
     if (searchInput) searchInput.value = '';
@@ -721,7 +743,7 @@ function setTodayVisitsToCurrentDate() {
 
 async function loadTodayVisits(date = null) {
     const dateInput = document.getElementById('tv-filter-date');
-    const targetDate = date || (dateInput ? dateInput.value : '') || new Date().toISOString().split('T')[0];
+    const targetDate = date || (dateInput ? dateInput.value : '') || getTodayDateStr();
     const container = document.getElementById('today-visits-container');
     if (container) {
         container.innerHTML = `
