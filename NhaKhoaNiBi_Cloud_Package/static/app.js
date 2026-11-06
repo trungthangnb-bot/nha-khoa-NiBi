@@ -2674,46 +2674,80 @@ async function triggerAiIntakeParse() {
         });
         if (res && res.data) {
             const d = res.data;
-            if (d.name) document.getElementById('pm-name').value = d.name;
-            if (d.phone) document.getElementById('pm-phone').value = d.phone;
-            if (d.yob) {
-                document.getElementById('pm-yob').value = d.yob;
-                updateAgeFromYob();
-            } else if (d.age) {
-                document.getElementById('pm-age').value = d.age;
-                updateYobFromAge();
+            if (d.name) {
+                const el = document.getElementById('pm-name');
+                if (el) el.value = d.name;
             }
-            if (d.address) document.getElementById('pm-address').value = d.address;
+            if (d.phone) {
+                const el = document.getElementById('pm-phone');
+                if (el) el.value = d.phone;
+            }
+            if (d.yob) {
+                const el = document.getElementById('pm-yob');
+                if (el) {
+                    el.value = d.yob;
+                    if (typeof syncAgeFromYob === 'function') syncAgeFromYob();
+                }
+            } else if (d.age) {
+                const el = document.getElementById('pm-age');
+                if (el) {
+                    el.value = d.age;
+                    if (typeof syncYobFromAge === 'function') syncYobFromAge();
+                }
+            }
+            if (d.address) {
+                const el = document.getElementById('pm-address');
+                if (el) el.value = d.address;
+            }
             if (d.branch) {
                 const branchSelect = document.getElementById('pm-branch');
                 if (branchSelect) branchSelect.value = d.branch;
             }
-            if (d.category) {
-                const catSelect = document.getElementById('pm-category');
-                if (catSelect) catSelect.value = d.category;
+            if (d.notes) {
+                const el = document.getElementById('pm-notes');
+                if (el) el.value = d.notes;
             }
-            if (d.procedure) document.getElementById('pm-proc').value = d.procedure;
-            if (d.tooth) document.getElementById('pm-tooth').value = d.tooth;
-            
-            // Cost and Paid in K (thousands VND)
-            if (d.cost !== undefined && d.cost !== null) {
-                document.getElementById('pm-cost').value = Math.round(d.cost / 1000);
-            }
-            if (d.paid !== undefined && d.paid !== null) {
-                document.getElementById('pm-paid').value = Math.round(d.paid / 1000);
-            }
-            if (d.method) {
-                const methSelect = document.getElementById('pm-method');
-                if (methSelect) methSelect.value = d.method;
-            }
-            if (d.next_date) document.getElementById('pm-next-date').value = d.next_date;
-            if (d.notes) document.getElementById('pm-note').value = d.notes;
 
-            // Recalculate debt
-            calculateDebt();
+            // Tự động bật và điền thông tin đợt điều trị đầu tiên nếu có thủ thuật hoặc chi phí
+            const hasTreatment = Boolean(d.procedure || (d.cost && d.cost > 0) || d.tooth);
+            if (hasTreatment) {
+                const chk = document.getElementById('pm-enable-treatment');
+                if (chk) {
+                    chk.checked = true;
+                    if (typeof toggleFirstTreatmentFields === 'function') toggleFirstTreatmentFields();
+                }
+                if (d.category) {
+                    const el = document.getElementById('pm-t-cat');
+                    if (el) el.value = d.category;
+                }
+                if (d.procedure) {
+                    const el = document.getElementById('pm-t-proc');
+                    if (el) el.value = d.procedure;
+                }
+                if (d.tooth) {
+                    const el = document.getElementById('pm-t-tooth');
+                    if (el) el.value = d.tooth;
+                }
+                if (d.cost !== undefined && d.cost !== null) {
+                    const el = document.getElementById('pm-t-cost');
+                    if (el) el.value = Math.round(d.cost / 1000);
+                }
+                if (d.paid !== undefined && d.paid !== null) {
+                    const el = document.getElementById('pm-t-paid');
+                    if (el) el.value = Math.round(d.paid / 1000);
+                }
+                if (d.method) {
+                    const el = document.getElementById('pm-t-method');
+                    if (el) el.value = d.method;
+                }
+                if (d.next_date) {
+                    const el = document.getElementById('pm-t-next');
+                    if (el) el.value = d.next_date;
+                }
+            }
 
             // Highlight filled fields with brief emerald glow
-            ['pm-name', 'pm-phone', 'pm-proc', 'pm-cost', 'pm-paid'].forEach(id => {
+            ['pm-name', 'pm-phone', 'pm-address', 'pm-t-proc', 'pm-t-cost', 'pm-t-paid'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el && el.value) {
                     el.classList.add('ring-2', 'ring-emerald-400', 'bg-emerald-50');
@@ -2721,7 +2755,7 @@ async function triggerAiIntakeParse() {
                 }
             });
 
-            showToast('⚡ AI đã tự động điền các thông tin vào hồ sơ!', 'success');
+            showToast('⚡ AI đã tự động điền đầy đủ thông tin vào hồ sơ!', 'success');
         }
     } catch (e) {
         showToast(e.message || 'Lỗi khi AI phân tích câu nói', 'error');
