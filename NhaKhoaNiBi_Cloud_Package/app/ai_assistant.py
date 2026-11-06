@@ -359,20 +359,23 @@ def format_single_patient_card(conn, p, today_str: str) -> str:
     if p_phone_note:
         phone_display += f" ({p_phone_note})"
 
+    p_extra = conn.execute("SELECT medical_history FROM patients WHERE id = ?", (p_id,)).fetchone()
+    med_hist = p_extra[0] if p_extra and p_extra[0] else ""
+
     tp_rows = conn.execute("""
         WITH tp AS (
-            SELECT t.id, t.procedure, t.cost, t.visit_date, t.dentist,
+            SELECT t.id, t.procedure, t.tooth, t.cost, t.visit_date, t.dentist,
                    COALESCE((SELECT SUM(amount) FROM payments WHERE treatment_id = t.id), 0) as paid
             FROM treatments t
             WHERE t.patient_id = ?
             ORDER BY t.visit_date DESC, t.id DESC
         )
-        SELECT procedure, cost, paid, MAX(cost - paid, 0) as debt, visit_date, dentist FROM tp
+        SELECT procedure, tooth, cost, paid, MAX(cost - paid, 0) as debt, visit_date, dentist FROM tp
     """, (p_id,)).fetchall()
 
-    total_cost = sum(r[1] for r in tp_rows)
-    total_paid = sum(r[2] for r in tp_rows)
-    total_debt = sum(r[3] for r in tp_rows)
+    total_cost = sum(r[2] for r in tp_rows)
+    total_paid = sum(r[3] for r in tp_rows)
+    total_debt = sum(r[4] for r in tp_rows)
 
     appt_row = conn.execute("""
         SELECT appt_date, appt_time, reason, branch FROM appointments
@@ -381,20 +384,23 @@ def format_single_patient_card(conn, p, today_str: str) -> str:
     """, (p_id, today_str)).fetchone()
 
     lines = [
-        f"👤 **Hồ Sơ Bệnh Nhân: {p_name}** (`{p_code}`)",
+        f"👤 **HỒ SƠ BỆNH ÁN: {p_name.upper()}** (`{p_code}`)",
         f"- 📞 **SĐT:** `{phone_display}`",
         f"- 🎂 **Năm sinh:** {yob_str}",
         f"- 📍 **Địa chỉ:** {p_address or 'Chưa cập nhật'} (Cơ sở tiếp đón: **{p_branch}**)",
         f"- 💰 **Tài chính:** Tổng chi phí `{total_cost/1000:,.1f}K` | Đã trả `{total_paid/1000:,.1f}K` | **Còn nợ: `{total_debt/1000:,.1f}K`**"
     ]
+    if med_hist:
+        lines.append(f"- 🏥 **Tiền sử bệnh:** {med_hist}")
     if tp_rows:
-        lines.append("- 🦷 **Lịch sử điều trị:**")
-        for r in tp_rows[:4]:
-            cost_k = f"{r[1]/1000:,.0f}K"
-            debt_k = f"(còn nợ {r[3]/1000:,.0f}K)" if r[3] > 0 else "(đã trả đủ)"
-            lines.append(f"  • *{r[4] or 'Mới'}:* {r[0]} (BS. {r[5] or 'Thắng'}) — {cost_k} {debt_k}")
-        if len(tp_rows) > 4:
-            lines.append(f"  *(và {len(tp_rows) - 4} đợt điều trị trước đó...)*")
+        lines.append(f"- 🦷 **Lịch sử điều trị ({len(tp_rows)} đợt):**")
+        for r in tp_rows[:12]:
+            tooth_str = f" [R{r[1]}]" if r[1] else ""
+            cost_k = f"{r[2]/1000:,.0f}K"
+            debt_k = f"(còn nợ {r[4]/1000:,.0f}K)" if r[4] > 0 else "(đã trả đủ)"
+            lines.append(f"  • *{r[5] or 'Mới'}:* **{r[0]}**{tooth_str} (BS. {r[6] or 'Thắng'}) — {cost_k} {debt_k}")
+        if len(tp_rows) > 12:
+            lines.append(f"  *(và {len(tp_rows) - 12} đợt điều trị trước đó nữa...)*")
     else:
         lines.append("- 🦷 Chưa có lịch sử điều trị.")
 
@@ -499,6 +505,50 @@ def answer_clinic_query(message: str, api_key: str = "", is_admin: bool = False)
                     + "\n".join(card_list)
                     + "\n\n💡 *Bác sĩ hãy hỏi cụ thể hơn (ví dụ: 'thông tin của " + matched_patients[0][2] + "') để xem đầy đủ hồ sơ và tiền nợ.*"
                 )
+        else:
+            # Nếu người dùng hỏi tổng quát về danh sách bệnh nhân hoặc lịch sử điều trị
+            general_patient_triggers = [
+                "danh sách bệnh nhân", "hồ sơ bệnh nhân", "hồ sơ", "lịch sử điều trị", 
+                "bệnh nhân điều trị", "truy xuất", "tra cứu", "các bệnh nhân", 
+                "bệnh nhân mới", "ca điều trị", "điều trị bệnh nhân", "thông tin hồ sơ",
+                "danh sách", "bệnh án", "lịch sử", "truy suất"
+            ]
+            if any(t in lower for t in general_patient_triggers):
+                recent_patients = conn.execute("""
+                    SELECT p.id, p.code, p.name, p.phone, p.address, p.branch
+                    FROM patients p
+                    ORDER BY p.id DESC
+                    LIMIT 8
+                """).fetchall()
+
+                recent_treatments = conn.execute("""
+                    SELECT t.visit_date, p.name, p.code, t.procedure, t.tooth, t.cost, t.dentist
+                    FROM treatments t
+                    JOIN patients p ON p.id = t.patient_id
+                    ORDER BY t.visit_date DESC, t.id DESC
+                    LIMIT 6
+                """).fetchall()
+
+                p_list_lines = []
+                for p in recent_patients:
+                    sdt = p[3] or "Chưa có SĐT"
+                    addr = f" — {p[4]}" if p[4] else ""
+                    p_list_lines.append(f"- **{p[2]}** (`{p[1]}`): SĐT `{sdt}`{addr} (CS **{p[5]}**)")
+
+                t_list_lines = []
+                for t in recent_treatments:
+                    tooth_str = f" [R{t[4]}]" if t[4] else ""
+                    t_list_lines.append(f"- *{t[0] or 'Mới'}:* **{t[1]}** (`{t[2]}`) — {t[3]}{tooth_str} (`{t[5]/1000:,.0f}K`, BS. {t[6] or 'Thắng'})")
+
+                p_sample_1 = recent_patients[0][2] if recent_patients else "Nguyễn Văn A"
+                p_sample_2 = recent_patients[1][2] if len(recent_patients) > 1 else p_sample_1
+                patient_context = (
+                    f"📋 **DANH SÁCH BỆNH NHÂN TIẾP ĐÓN GẦN ĐÂY NHẤT ({len(recent_patients)} hồ sơ):**\n"
+                    + "\n".join(p_list_lines)
+                    + f"\n\n🦷 **CÁC ĐỢT ĐIỀU TRỊ THỰC HIỆN GẦN ĐÂY NHẤT:**\n"
+                    + "\n".join(t_list_lines)
+                    + f"\n\n💡 *Bác sĩ có thể hỏi bất kỳ ai để xem toàn bộ hồ sơ chi tiết (Ví dụ: 'hồ sơ của {p_sample_1}', 'lịch sử điều trị của {p_sample_2}').*"
+                )
 
     # 2. Xử lý qua Google Gemini API nếu có key
     key = api_key or get_gemini_api_key()
@@ -530,7 +580,7 @@ Dữ liệu thời gian thực từ CSDL:
 Quy tắc:
 1. Trả lời súc tích, chính xác, lịch sự, đúng sự thật.
 2. {'Nếu người dùng hỏi về doanh thu thì trả lời đầy đủ.' if is_admin else 'Người dùng là nhân viên: TUYỆT ĐỐI từ chối cung cấp bất kỳ số liệu doanh thu nào.'}
-3. Nếu người dùng hỏi về thông tin bệnh nhân, sử dụng thông tin bệnh nhân đã tìm được ở trên để trả lời đầy đủ.
+3. Khi người dùng hỏi về danh sách bệnh nhân, hồ sơ bệnh án hoặc lịch sử điều trị: Hãy sử dụng toàn bộ thông tin bệnh nhân và các đợt điều trị ở trên để trả lời đầy đủ, chi tiết, kèm tình hình công nợ nếu có.
 """
         reply = call_gemini_api(message, system_instruction=sys_prompt, api_key=key)
         if reply:
