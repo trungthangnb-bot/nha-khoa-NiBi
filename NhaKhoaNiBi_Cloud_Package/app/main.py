@@ -10,7 +10,7 @@ import sqlite3
 import time
 from typing import Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
+from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -150,10 +150,22 @@ def money_text(v):
 
 
 # ───────────────────────── auth ─────────────────────────
-def current_user(authorization: Optional[str] = Header(None)):
-    if not authorization or not authorization.lower().startswith("bearer "):
+def current_user(
+    authorization: Optional[str] = Header(None),
+    token: Optional[str] = Query(None),
+    nibi_token: Optional[str] = Cookie(None)
+):
+    raw_token = None
+    if authorization and authorization.lower().startswith("bearer "):
+        raw_token = authorization[7:].strip()
+    elif token:
+        raw_token = token.strip()
+    elif nibi_token:
+        raw_token = nibi_token.strip()
+
+    if not raw_token:
         raise HTTPException(401, "Chưa đăng nhập")
-    digest = token_digest(authorization[7:].strip())
+    digest = token_digest(raw_token)
     with db() as conn:
         row = conn.execute(
             "SELECT u.id,u.username,u.full_name,u.role FROM sessions s JOIN users u ON u.id=s.user_id"

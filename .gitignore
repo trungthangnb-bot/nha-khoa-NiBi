@@ -1,0 +1,7 @@
+cloudflared.exe
+__pycache__/
+*.pyc
+*.log
+.system_generated/
+*.vbs
+*.bat

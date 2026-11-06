@@ -1,0 +1,25 @@
+Báo cáo nhập Excel - 24 dòng cần rà soát
+- Dữ liệu nhập dòng 54: có tiền (200.0k) nhưng không ghi tên -> gom vào hồ sơ 'Khách chưa ghi tên'
+- NCCĐ dòng 41 (Phạm Minh Chiến): chưa ghi TỔNG (đã thu 0 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ
+- NCCĐ dòng 43 (Nguyễn Thị Liễu): chưa ghi TỔNG (đã thu 5 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ
+- NCCĐ dòng 44 (Em Thạnh): chưa ghi TỔNG (đã thu 5 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ
+- NCCĐ dòng 48 (Nguyễn Ngọc Khuê): chưa ghi TỔNG (đã thu 5 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ
+- NCCĐ dòng 56 (Nguyễn Thị Kim Anh): chưa ghi TỔNG (đã thu 35 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ
+- NCCĐ dòng 57 (Tràn Thị Thanh): chưa ghi TỔNG (đã thu 17 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ
+- NCCĐ dòng 64 (Ngô Thị Thu): chưa ghi TỔNG (đã thu 9 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ
+- NCCĐ dòng 68 (Lưu Ngọc Ánh): chưa ghi TỔNG (đã thu 4 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ
+- NCCĐ dòng 92 (Dương Lê Sáng): chưa ghi TỔNG (đã thu 5 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ
+- NCCĐ dòng 118 (Trần Thị Dương): chưa ghi TỔNG (đã thu 4 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ
+- NCCĐ dòng 125 (Vân Khánh): chưa ghi TỔNG (đã thu 0 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ
+- NCCĐ dòng 169 (Nguyễn Thị Trang): chưa ghi TỔNG (đã thu 0 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ
+- NCCĐ dòng 206 (Nguyễn Thị Huyền (con Hà Tiến)): chưa ghi TỔNG (đã thu 10 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ
+- NCCĐ dòng 228 (Nguyễn Minh Thuý): chưa ghi TỔNG (đã thu 10 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ
+- NCCĐ dòng 229 (Nguyễn Tuyết Lan): chưa ghi TỔNG (đã thu 5 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ
+- NCCĐ dòng 236 (Nguyễn Thị Thu Nhan): chưa ghi TỔNG (đã thu 5 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ
+- NCCĐ dòng 240 (Nguyễn Thị Tĩnh): chưa ghi TỔNG (đã thu 5 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ
+- NCCĐ dòng 259 (Nguyễn Thị Nhàn): chưa ghi TỔNG (đã thu 2.5 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ
+- NCCĐ dòng 297 (Nguyễn Thị Hánh Huyền): chưa ghi TỔNG (đã thu 0 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ
+- NCCĐ dòng 308 (Nguyễn Cẩm Tú): chưa ghi TỔNG (đã thu 5 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ
+- NCCĐ dòng 309 (Lê Tuấn Đức (con Tuấn Anh)): thiếu phòng khám -> gán 'Cửu Yên'
+- NCCĐ dòng 309 (Lê Tuấn Đức (con Tuấn Anh)): chưa ghi TỔNG (đã thu 0 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ
+- NCCĐ dòng 310 (Lê Thu Hằng (con Anh Vương)): chưa ghi TỔNG (đã thu 0 triệu) -> coi tổng = đã thu, nợ 0. Cần bổ sung tổng nếu còn nợ

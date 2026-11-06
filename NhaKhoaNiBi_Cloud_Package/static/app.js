@@ -1743,11 +1743,13 @@ async function loadAuditLogs() {
 
 // ==================== CSV EXPORTS ====================
 function exportDebtsCsv() {
-    window.location.href = `/api/export/debts.csv?branch=${encodeURIComponent(state.branchFilter)}`;
+    const t = state.token ? `&token=${encodeURIComponent(state.token)}` : '';
+    window.location.href = `/api/export/debts.csv?branch=${encodeURIComponent(state.branchFilter)}${t}`;
 }
 
 function exportPatientsCsv() {
-    window.location.href = '/api/export/patients.csv';
+    const t = state.token ? `?token=${encodeURIComponent(state.token)}` : '';
+    window.location.href = `/api/export/patients.csv${t}`;
 }
 
 // ==================== PIN & PASSWORD HELPERS ====================
@@ -2302,9 +2304,34 @@ async function openPatientDetailFromAlert(pid) {
 }
 
 // ───────── Admin Sub-Tab: Safe Database Backup ─────────
-function downloadBackupDatabase() {
-    window.location.href = '/api/admin/backup.db';
-    showToast('Đang tải file sao lưu CSDL (.db)...', 'info');
+async function downloadBackupDatabase() {
+    try {
+        showToast('Đang tạo và tải file sao lưu CSDL (.db)...', 'info');
+        const resp = await fetch('/api/admin/backup.db', {
+            headers: { 'Authorization': `Bearer ${state.token}` }
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || 'Không thể tải file sao lưu');
+        }
+        const blob = await resp.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const today = new Date().toISOString().split('T')[0];
+        a.download = `NiBi_Dental_Backup_${today}.db`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        showToast('Tải file sao lưu CSDL thành công!', 'success');
+    } catch (e) {
+        if (state.token) {
+            window.location.href = `/api/admin/backup.db?token=${encodeURIComponent(state.token)}`;
+        } else {
+            showToast(e.message || 'Lỗi khi tải sao lưu', 'error');
+        }
+    }
 }
 
 function toggleMobileSidebar() {
