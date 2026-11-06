@@ -116,10 +116,7 @@ def parse_intake_fallback(text: str) -> dict:
         res["yob"] = current_year - res["age"]
 
     # 3. Branch
-    if re.search(r'phố\s*dâu', raw, re.IGNORECASE):
-        res["branch"] = "Phố Dâu"
-    elif re.search(r'cửu\s*yên', raw, re.IGNORECASE):
-        res["branch"] = "Cửu Yên"
+    res["branch"] = "Ninh Vân"
 
     # 4. Address matching from known dental clinic village list
     for addr in KNOWN_ADDRESSES:
@@ -233,8 +230,8 @@ Trả về định dạng JSON thuần túy với các trường:
   "phone": "Số điện thoại nếu có (chuỗi)",
   "yob": Năm sinh (số nguyên 4 chữ số hoặc null),
   "age": Tuổi (số nguyên hoặc null),
-  "address": "Địa chỉ / quê quán (ví dụ: Xí Nghiệp, Xuân Vũ, Phú Lăng, Ninh Vân, Phố Dâu...)",
-  "branch": "Cơ sở: Ninh Vân, Phố Dâu hoặc Cửu Yên (mặc định Ninh Vân)",
+  "address": "Địa chỉ / quê quán (ví dụ: Xí Nghiệp, Xuân Vũ, Phú Lăng, Ninh Vân...)",
+  "branch": "Cơ sở: Ninh Vân",
   "category": "Nhóm dịch vụ: Tổng quát, Nhổ răng, Điều trị tủy, Răng giả, Chỉnh nha, Implant",
   "procedure": "Nội dung thủ thuật điều trị ngắn gọn",
   "tooth": "Vị trí răng nếu có (ví dụ R48, R16)",
@@ -585,7 +582,7 @@ def answer_clinic_query(message: str, api_key: str = "", is_admin: bool = False)
     if key:
         db_context_parts = [
             f"DỮ LIỆU THỜI GIAN THỰC NHA KHOA NIBI (Hôm nay: {today_str}):",
-            f"- Toàn hệ thống có: {total_patients} bệnh nhân (cả cũ và mới qua 3 cơ sở Ninh Vân, Phố Dâu, Cửu Yên)"
+            f"- Toàn hệ thống có: {total_patients} bệnh nhân (cả cũ và mới)"
         ]
         if is_admin:
             db_context_parts.append(
@@ -628,7 +625,7 @@ Quy tắc:
             f"- **Tổng thực thu:** `{month_total/1000:,.1f}K` ({month_total:,.0f} VNĐ)\n"
             f"- **Tiền mặt:** `{month_cash/1000:,.1f}K`\n"
             f"- **Chuyển khoản:** `{month_transfer/1000:,.1f}K`\n"
-            f"*(Đồng bộ trực tiếp từ sổ thu ngân 3 cơ sở Ninh Vân, Phố Dâu, Cửu Yên)*"
+            f"*(Đồng bộ trực tiếp từ sổ thu ngân hệ thống)*"
         )
     elif any(k in lower for k in ["nợ", "công nợ", "ai nợ"]):
         debtors_text = "\n".join([f"{i+1}. **{d[0]}** ({d[2]} - SĐT: {d[1] or 'Chưa có'}): nợ `{d[3]/1000:,.1f}K`" for i, d in enumerate(top_debtors)])

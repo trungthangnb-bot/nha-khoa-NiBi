@@ -309,7 +309,7 @@ def meta(user=Depends(current_user)):
 
         clinic_name = get_val("clinic_name", "Nha Khoa NiBi - BS. Thắng")
         clinic_hotline = get_val("clinic_hotline", "0976.838.901")
-        clinic_address = get_val("clinic_address", "Ninh Vân • Phố Dâu • Cửu Yên")
+        clinic_address = get_val("clinic_address", "Ninh Vân")
         branches = get_val("branches", BRANCHES)
         categories = get_val("categories", CATEGORIES)
         dentists = get_val("dentists", None)
@@ -407,9 +407,33 @@ def add_calendar_months(sourcedate: dt.date, months: int) -> dt.date:
     return dt.date(year, month, day)
 
 
+def get_allowed_branches(conn=None) -> list[str]:
+    def _read_from_conn(c):
+        row = c.execute("SELECT value FROM settings WHERE key='branches'").fetchone()
+        if row and row[0]:
+            try:
+                b_list = json.loads(row[0])
+                if isinstance(b_list, list) and b_list:
+                    return [str(b).strip() for b in b_list if str(b).strip()]
+            except Exception:
+                pass
+        return None
+
+    if conn is not None:
+        res = _read_from_conn(conn)
+        if res:
+            return res
+    else:
+        with db() as c:
+            res = _read_from_conn(c)
+            if res:
+                return res
+    return BRANCHES
+
+
 def insert_treatment(conn, user, pid, patient_name, branch_default, t: TreatmentIn):
     visit = vdate(t.visit_date, "Ngày khám") or today_iso()
-    branch = vchoice(t.branch or branch_default, BRANCHES, "Cơ sở")
+    branch = vchoice(t.branch or branch_default, get_allowed_branches(conn), "Cơ sở")
     category = vchoice(t.category, CATEGORIES, "Nhóm dịch vụ")
     method = vchoice(t.method, METHODS, "Hình thức thanh toán")
     nxt = vdate(t.next_date, "Ngày hẹn tái khám")
@@ -458,10 +482,10 @@ def create_patient(data: PatientCreate, user=Depends(current_user)):
     name = clean(data.name)
     if not name:
         raise HTTPException(422, "Họ tên không được để trống")
-    vchoice(data.branch, BRANCHES, "Cơ sở")
     yob = vyob(data.yob)
     phone = clean(data.phone)
     with db() as conn:
+        vchoice(data.branch, get_allowed_branches(conn), "Cơ sở")
         if not data.force:
             for r in conn.execute("SELECT id,name,phone,yob,address FROM patients WHERE search_text LIKE ?",
                                   (f"%{strip_accents(name)}%",)):
@@ -515,8 +539,8 @@ def update_patient(pid: int, data: PatientUpdate, user=Depends(current_user)):
     name = clean(data.name)
     if not name:
         raise HTTPException(422, "Họ tên không được để trống")
-    vchoice(data.branch, BRANCHES, "Cơ sở")
     with db() as conn:
+        vchoice(data.branch, get_allowed_branches(conn), "Cơ sở")
         check_pin(conn, user, data.pin)
         old = conn.execute("SELECT * FROM patients WHERE id=?", (pid,)).fetchone()
         if not old:
@@ -592,7 +616,7 @@ def update_treatment(tid: int, data: TreatmentUpdate, user=Depends(current_user)
                            "WHERE t.id=?", (tid,)).fetchone()
         if not old:
             raise HTTPException(404, "Không tìm thấy đợt điều trị")
-        new = {"visit_date": vdate(data.visit_date, "Ngày khám"), "branch": vchoice(data.branch, BRANCHES, "Cơ sở"),
+        new = {"visit_date": vdate(data.visit_date, "Ngày khám"), "branch": vchoice(data.branch, get_allowed_branches(conn), "Cơ sở"),
                "category": vchoice(data.category, CATEGORIES, "Nhóm dịch vụ"), "dentist": clean(data.dentist),
                "procedure": clean(data.procedure), "tooth": clean(data.tooth), "cost": data.cost,
                "notes": data.notes.strip()}
@@ -853,7 +877,7 @@ def create_appointment(data: ApptIn, user=Depends(current_user)):
         p = conn.execute("SELECT id,name,branch FROM patients WHERE id=?", (data.patient_id,)).fetchone()
         if not p:
             raise HTTPException(404, "Không tìm thấy bệnh nhân")
-        branch = vchoice(data.branch or p["branch"], BRANCHES, "Cơ sở")
+        branch = vchoice(data.branch or p["branch"], get_allowed_branches(conn), "Cơ sở")
         cur = conn.execute("INSERT INTO appointments(patient_id,kind,appt_date,appt_time,branch,reason) VALUES(?,?,?,?,?,?)",
                            (p["id"], data.kind, date, vtime(data.appt_time), branch, clean(data.reason)))
         audit(conn, user, "appointment_create", "appointment", cur.lastrowid, p["id"], p["name"],
@@ -1157,7 +1181,7 @@ def get_app_settings(user=Depends(admin_only)):
         return {
             "clinic_name": get_val("clinic_name", "Nha Khoa NiBi - BS. Thắng"),
             "clinic_hotline": get_val("clinic_hotline", "0976.838.901"),
-            "clinic_address": get_val("clinic_address", "Ninh Vân • Phố Dâu • Cửu Yên"),
+            "clinic_address": get_val("clinic_address", "Ninh Vân"),
             "branches": get_val("branches", BRANCHES),
             "categories": get_val("categories", CATEGORIES),
             "dentists": get_val("dentists", ["Thắng"]),

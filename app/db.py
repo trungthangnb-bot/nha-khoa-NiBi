@@ -9,7 +9,7 @@ from .textutil import strip_accents
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.environ.get("NIBI_DB") or os.path.join(BASE_DIR, "data", "nibi.db")
 
-BRANCHES = ["Ninh Vân", "Phố Dâu", "Cửu Yên"]
+BRANCHES = ["Ninh Vân"]
 CATEGORIES = ["Tổng quát", "Nhổ răng", "Điều trị tủy", "Răng giả", "Chỉnh nha", "Implant"]
 METHODS = ["Tiền mặt", "Chuyển khoản"]
 APPT_KINDS = ["hen_kham", "tai_kham"]

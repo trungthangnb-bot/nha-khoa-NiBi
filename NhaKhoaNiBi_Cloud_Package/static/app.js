@@ -461,8 +461,9 @@ async function onAuthenticated() {
         console.error('Failed to load meta', e);
     }
 
-    // Populate dentist selection lists in intake & treatment forms
+    // Populate dentist & branch selection lists in intake & treatment forms
     populateDentistSelects();
+    populateBranchSelects();
 
     // Render address autocomplete suggestions & quick chips from history
     renderAddressSuggestions();
@@ -539,7 +540,7 @@ async function switchTab(tab) {
 
     // Update Header Titles
     const titles = {
-        dashboard: ['Tổng quan phòng khám', 'Dữ liệu đồng bộ trực tiếp • 3 cơ sở Ninh Vân, Phố Dâu, Cửu Yên'],
+        dashboard: ['Tổng quan phòng khám', 'Dữ liệu đồng bộ trực tiếp • Hệ thống Nha Khoa NiBi'],
         patients: ['Hồ sơ bệnh nhân & Bệnh án', 'Tìm kiếm không dấu, xem đợt điều trị, tiền sử bệnh'],
         debts: ['Sổ quản lý công nợ', 'Thu hồi công nợ theo đợt điều trị, tự động cấn trừ FIFO'],
         appointments: ['Lịch hẹn & Tái khám', 'Quản lý lịch hẹn khám mới và nhắc tái khám'],
@@ -2316,11 +2317,75 @@ async function saveClinicSettings() {
         // Refresh meta
         state.meta = await api('/api/meta');
         populateDentistSelects();
+        populateBranchSelects();
     } catch (e) {
         showToast(e.message, 'error');
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> <span>Lưu toàn bộ cài đặt ứng dụng</span>';
+    }
+}
+
+// ───────── Populate Branch Select Options ─────────
+function populateBranchSelects() {
+    const branches = state.meta?.branches || ['Ninh Vân'];
+    const currentFilter = state.branchFilter || '';
+
+    // 1. Filter dropdowns (sidebar, mobile drawer, top header)
+    const filterOptions = [
+        `<option value="">🏢 ${branches.length > 1 ? `Tất cả ${branches.length} cơ sở` : 'Tất cả cơ sở'}</option>`,
+        ...branches.map(b => `<option value="${escapeHtml(b)}">📍 ${escapeHtml(b)}</option>`)
+    ].join('');
+
+    const bSide = document.getElementById('branch-select');
+    if (bSide) {
+        bSide.innerHTML = filterOptions;
+        bSide.value = branches.includes(currentFilter) ? currentFilter : '';
+    }
+
+    const bMob = document.getElementById('branch-select-mobile');
+    if (bMob) {
+        bMob.innerHTML = filterOptions;
+        bMob.value = branches.includes(currentFilter) ? currentFilter : '';
+    }
+
+    const bTop = document.getElementById('branch-select-top');
+    if (bTop) {
+        bTop.innerHTML = filterOptions;
+        bTop.value = branches.includes(currentFilter) ? currentFilter : '';
+    }
+
+    // 2. Form dropdowns (patient intake, treatment, appointment)
+    const formOptions = branches.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
+
+    const pmBranch = document.getElementById('pm-branch');
+    if (pmBranch) {
+        const val = pmBranch.value;
+        pmBranch.innerHTML = formOptions;
+        if (branches.includes(val)) pmBranch.value = val;
+        else if (branches.length > 0) pmBranch.value = branches[0];
+    }
+
+    const tmBranch = document.getElementById('tm-branch');
+    if (tmBranch) {
+        const val = tmBranch.value;
+        tmBranch.innerHTML = formOptions;
+        if (branches.includes(val)) tmBranch.value = val;
+        else if (branches.length > 0) tmBranch.value = branches[0];
+    }
+
+    const apptmBranch = document.getElementById('apptm-branch');
+    if (apptmBranch) {
+        const val = apptmBranch.value;
+        apptmBranch.innerHTML = formOptions;
+        if (branches.includes(val)) apptmBranch.value = val;
+        else if (branches.length > 0) apptmBranch.value = branches[0];
+    }
+
+    // 3. Update login badge label
+    const loginBadge = document.getElementById('login-branch-label');
+    if (loginBadge) {
+        loginBadge.textContent = branches.length === 1 ? `Cơ sở: ${branches[0]}` : branches.join(' • ');
     }
 }
 

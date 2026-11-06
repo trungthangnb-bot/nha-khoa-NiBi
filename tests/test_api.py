@@ -249,7 +249,7 @@ class ApiTest(unittest.TestCase):
         # 2. Test "Chỉnh nha" recall auto-generation (+1m)
         p2 = self.new_patient("BN Chỉnh Nha", phone="0922000222")
         t2 = self.c.post(f"/api/patients/{p2['id']}/treatments", headers=self.staff, json={
-            "visit_date": "2026-03-10", "branch": "Phố Dâu", "category": "Chỉnh nha",
+            "visit_date": "2026-03-10", "branch": "Ninh Vân", "category": "Chỉnh nha",
             "procedure": "Gắn mắc cài 2 hàm", "cost": 25000000, "paid": 5000000, "notes": ""
         }).json()
         self.assertIn("id", t2)
@@ -386,7 +386,7 @@ class ApiTest(unittest.TestCase):
 
     def test_73_ai_search_all_historical_patients(self):
         # Create an older patient with treatment in isolated test db
-        p_old = self.new_patient(name="Đỗ Đình Huy", phone="0862898462", yob=1988, address="Cửu Yên", branch="Cửu Yên")
+        p_old = self.new_patient(name="Đỗ Đình Huy", phone="0862898462", yob=1988, address="Cửu Yên", branch="Ninh Vân")
         p_old_id = p_old["id"]
         self.c.post("/api/treatments", headers=self.staff, json={
             "patient_id": p_old_id, "procedure": "Làm cầu răng sứ", "tooth": "R24", "cost": 3000000, "dentist": "Thắng"
@@ -407,6 +407,29 @@ class ApiTest(unittest.TestCase):
         res_phone = self.c.post("/api/ai/chat", json={"message": "tìm số 0862898462"}, headers=self.staff)
         self.assertEqual(res_phone.status_code, 200)
         self.assertTrue("0862898462" in res_phone.json()["reply"] or "Đỗ Đình Huy" in res_phone.json()["reply"])
+
+    def test_74_dynamic_branch_management(self):
+        # 1. Default branch is only "Ninh Vân"
+        meta = self.c.get("/api/meta", headers=self.staff).json()
+        self.assertEqual(meta["branches"], ["Ninh Vân"])
+
+        # 2. Add a new branch via Admin Settings
+        settings = self.c.get("/api/admin/settings", headers=self.admin).json()
+        settings["branches"] = ["Ninh Vân", "Cơ Sở Mới"]
+        res_save = self.c.post("/api/admin/settings", json=settings, headers=self.admin)
+        self.assertEqual(res_save.status_code, 200)
+
+        # 3. Verify new branch is active in meta and can be used for new patient
+        meta2 = self.c.get("/api/meta", headers=self.staff).json()
+        self.assertEqual(meta2["branches"], ["Ninh Vân", "Cơ Sở Mới"])
+
+        p_new = self.new_patient("Bệnh Nhân Cơ Sở Mới", branch="Cơ Sở Mới")
+        p_detail = self.c.get(f"/api/patients/{p_new['id']}", headers=self.staff).json()["patient"]
+        self.assertEqual(p_detail["branch"], "Cơ Sở Mới")
+
+        # 4. Clean up / revert back to only "Ninh Vân"
+        settings["branches"] = ["Ninh Vân"]
+        self.c.post("/api/admin/settings", json=settings, headers=self.admin)
 
     def test_99_logout_invalidates_token(self):
         h = self.login("letan", "abc123")

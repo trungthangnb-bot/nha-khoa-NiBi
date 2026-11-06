@@ -71,7 +71,7 @@
                 <p class="text-amber-300 text-xs font-bold tracking-wide mt-0.5">CHĂM SÓC NỤ CƯỜI • BS. THẮNG</p>
                 <div class="mt-3 inline-flex items-center gap-1.5 px-3 py-1 bg-white/15 rounded-full text-xs font-semibold">
                     <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    Ninh Vân • Phố Dâu • Cửu Yên
+                    <span id="login-branch-label">Cơ sở: Ninh Vân</span>
                 </div>
             </div>
 
@@ -138,10 +138,8 @@
         <div class="p-3 border-b border-slate-800 bg-slate-950/40">
             <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 block">Cơ sở hoạt động</label>
             <select id="branch-select" onchange="onBranchChange(this.value)" class="w-full bg-slate-800 border border-slate-700 text-teal-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-teal-500">
-                <option value="">🏢 Tất cả 3 cơ sở</option>
+                <option value="">🏢 Tất cả cơ sở</option>
                 <option value="Ninh Vân">📍 Ninh Vân</option>
-                <option value="Phố Dâu">📍 Phố Dâu</option>
-                <option value="Cửu Yên">📍 Cửu Yên</option>
             </select>
         </div>
 
@@ -246,10 +244,8 @@
             <div class="p-3 border-b border-slate-800 bg-slate-950/30">
                 <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 block">Cơ sở hoạt động</label>
                 <select id="branch-select-mobile" onchange="onBranchChange(this.value)" class="w-full bg-slate-800 border border-slate-700 text-teal-300 rounded-lg px-2.5 py-2 text-xs font-semibold focus:outline-none focus:border-teal-500">
-                    <option value="">🏢 Tất cả 3 cơ sở</option>
+                    <option value="">🏢 Tất cả cơ sở</option>
                     <option value="Ninh Vân">📍 Ninh Vân</option>
-                    <option value="Phố Dâu">📍 Phố Dâu</option>
-                    <option value="Cửu Yên">📍 Cửu Yên</option>
                 </select>
             </div>
 
@@ -345,17 +341,15 @@
                 </div>
                 <div>
                     <h1 id="page-title" class="text-base md:text-xl font-extrabold text-slate-800">Tổng quan phòng khám</h1>
-                    <p id="page-subtitle" class="text-xs text-slate-500 hidden sm:block">Dữ liệu đồng bộ trực tiếp • 3 cơ sở Ninh Vân, Phố Dâu, Cửu Yên</p>
+                    <p id="page-subtitle" class="text-xs text-slate-500 hidden sm:block">Dữ liệu đồng bộ trực tiếp • Hệ thống Nha Khoa NiBi</p>
                 </div>
             </div>
 
             <div class="flex items-center gap-2">
                 <div class="hidden sm:flex items-center gap-2">
                     <select id="branch-select-top" onchange="onBranchChange(this.value)" class="bg-slate-100 border border-slate-200 text-slate-700 rounded-xl px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500">
-                        <option value="">🏢 Tất cả 3 cơ sở</option>
+                        <option value="">🏢 Tất cả cơ sở</option>
                         <option value="Ninh Vân">📍 Ninh Vân</option>
-                        <option value="Phố Dâu">📍 Phố Dâu</option>
-                        <option value="Cửu Yên">📍 Cửu Yên</option>
                     </select>
                 </div>
                 <button onclick="toggleAdminAlertsModal()" class="admin-only relative p-2 text-slate-600 hover:text-amber-600 rounded-xl hover:bg-slate-100 transition flex items-center justify-center" title="Cảnh báo sửa đổi bệnh án (Bí mật Admin)">
@@ -800,7 +794,7 @@
                                 <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Địa chỉ / Slogan phòng khám</label>
                                 <input type="text" id="cfg-clinic-address"
                                        class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-teal-500 outline-none text-sm"
-                                       placeholder="Ví dụ: Ninh Vân • Phố Dâu • Cửu Yên">
+                                       placeholder="Ví dụ: Ninh Vân">
                             </div>
 
                             <div class="pt-3 border-t border-slate-100 space-y-4">
@@ -810,8 +804,8 @@
                                     </label>
                                     <input type="text" id="cfg-branches" required
                                            class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold focus:bg-white focus:border-teal-500 outline-none text-sm"
-                                           placeholder="Ninh Vân, Phố Dâu, Cửu Yên">
-                                    <p class="text-[11px] text-slate-400 mt-1">Cơ sở này sẽ xuất hiện trong toàn bộ bộ lọc và phiếu tiếp đón bệnh nhân</p>
+                                           placeholder="Ví dụ: Ninh Vân (muốn thêm cơ sở mới thì gõ thêm, cách nhau dấu phẩy)">
+                                    <p class="text-[11px] text-slate-400 mt-1">Cơ sở này sẽ xuất hiện trong toàn bộ bộ lọc và phiếu tiếp đón bệnh nhân. Sau này muốn thêm thì gõ thêm tại đây.</p>
                                 </div>
 
                                 <div>
@@ -1064,8 +1058,6 @@
                         <select id="pm-branch" required
                                 class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none transition text-sm">
                             <option value="Ninh Vân">Ninh Vân</option>
-                            <option value="Phố Dâu">Phố Dâu</option>
-                            <option value="Cửu Yên">Cửu Yên</option>
                         </select>
                     </div>
                 </div>
@@ -1358,8 +1350,6 @@
                         <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Cơ sở</label>
                         <select id="tm-branch" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-medium">
                             <option value="Ninh Vân">Ninh Vân</option>
-                            <option value="Phố Dâu">Phố Dâu</option>
-                            <option value="Cửu Yên">Cửu Yên</option>
                         </select>
                     </div>
                 </div>
@@ -1576,8 +1566,6 @@
                         <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Cơ sở</label>
                         <select id="apptm-branch" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-medium">
                             <option value="Ninh Vân">Ninh Vân</option>
-                            <option value="Phố Dâu">Phố Dâu</option>
-                            <option value="Cửu Yên">Cửu Yên</option>
                         </select>
                     </div>
                 </div>
