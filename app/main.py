@@ -467,6 +467,15 @@ def insert_treatment(conn, user, pid, patient_name, branch_default, t: Treatment
         first_appt = nxt if nxt else d_1m
         conn.execute("INSERT INTO appointments(patient_id,kind,appt_date,branch,reason,status) VALUES(?,?,?,?,?,?)",
                      (pid, "tai_kham", first_appt, branch, f"Tái khám Chỉnh nha định kỳ (1 tháng): {procedure}", "Chờ đến"))
+    elif category == "Nhổ răng":
+        # Hẹn tái khám sau 1 ngày để kiểm tra vết thương và hẹn tái khám sau 7 ngày hẹn cắt chỉ
+        d_1d = (v_date_obj + dt.timedelta(days=1)).isoformat()
+        d_7d = (v_date_obj + dt.timedelta(days=7)).isoformat()
+        cut_stitch_date = nxt if nxt else d_7d
+        conn.execute("INSERT INTO appointments(patient_id,kind,appt_date,branch,reason,status) VALUES(?,?,?,?,?,?)",
+                     (pid, "tai_kham", d_1d, branch, f"Kiểm tra vết thương (sau 1 ngày): {procedure}", "Chờ đến"))
+        conn.execute("INSERT INTO appointments(patient_id,kind,appt_date,branch,reason,status) VALUES(?,?,?,?,?,?)",
+                     (pid, "tai_kham", cut_stitch_date, branch, f"Hẹn cắt chỉ (sau 7 ngày): {procedure}", "Chờ đến"))
     else:
         if nxt:
             conn.execute("INSERT INTO appointments(patient_id,kind,appt_date,branch,reason,status) VALUES(?,?,?,?,?,?)",

@@ -1599,6 +1599,9 @@ function updateCategoryRecallHint(cat, targetId) {
     } else if (cat === 'Chỉnh nha') {
         el.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles text-teal-600 mr-1.5"></i><b>Quy tắc chuyên khoa Chỉnh nha:</b> Hệ thống tự động tạo lịch hẹn tái khám <b>1 tháng/lần</b> định kỳ liên tục đến khi kết thúc chỉnh nha.';
         el.classList.remove('hidden');
+    } else if (cat === 'Nhổ răng') {
+        el.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles text-rose-500 mr-1.5"></i><b>Quy tắc chuyên khoa Nhổ răng:</b> Hệ thống tự động tạo <b>2 lịch hẹn tái khám</b>: sau <b>1 ngày</b> (kiểm tra vết thương) và sau <b>7 ngày</b> (hẹn cắt chỉ).';
+        el.classList.remove('hidden');
     } else {
         el.classList.add('hidden');
     }

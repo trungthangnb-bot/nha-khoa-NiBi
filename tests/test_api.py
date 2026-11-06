@@ -63,8 +63,11 @@ class ApiTest(unittest.TestCase):
             "method": "Chuyển khoản", "next_date": nxt})
         d = self.c.get(f"/api/patients/{res['id']}", headers=self.staff).json()
         self.assertEqual(d["totals"], {"billed": 500_000, "paid": 300_000, "debt": 200_000})
-        self.assertEqual(len(d["appointments"]), 1)
-        self.assertEqual(d["appointments"][0]["appt_date"], nxt)
+        # Category "Nhổ răng" automatically schedules 2 recall appointments (1 day: check wound & 7 days: cut stitches)
+        self.assertEqual(len(d["appointments"]), 2)
+        appt_dates = [a["appt_date"] for a in d["appointments"]]
+        self.assertIn(iso(TODAY + dt.timedelta(days=1)), appt_dates)
+        self.assertIn(nxt, appt_dates)
         self.assertEqual(d["patient"]["code"], f"BN{res['id']:05d}")
         self.assertEqual(d["patient"]["age"], TODAY.year - 1990)
 
@@ -266,6 +269,22 @@ class ApiTest(unittest.TestCase):
         appts2_after = self.c.get(f"/api/appointments?when=all&q=BN%20Ch%E1%BB%89nh%20Nha", headers=self.staff).json()["items"]
         dates2_after = [a["appt_date"] for a in appts2_after]
         self.assertIn("2026-05-10", dates2_after) # Next 1 month automatically scheduled!
+
+        # 3. Test "Nhổ răng" recall auto-generation (+1d check wound, +7d cut stitches)
+        p3 = self.new_patient("BN Nhổ Răng Khôn", phone="0933000333")
+        t3 = self.c.post(f"/api/patients/{p3['id']}/treatments", headers=self.staff, json={
+            "visit_date": "2026-03-10", "branch": "Ninh Vân", "category": "Nhổ răng",
+            "procedure": "Nhổ răng khôn R48 lệch ngầm", "tooth": "R48", "cost": 1500000, "paid": 1500000, "notes": ""
+        }).json()
+        self.assertIn("id", t3)
+
+        appts3 = self.c.get(f"/api/appointments?when=all&q=BN%20Nh%E1%BB%95%20R%C4%83ng", headers=self.staff).json()["items"]
+        dates3 = [a["appt_date"] for a in appts3]
+        self.assertIn("2026-03-11", dates3) # 1 day later (kiểm tra vết thương)
+        self.assertIn("2026-03-17", dates3) # 7 days later (cắt chỉ)
+        reasons3 = " ".join([a["reason"] for a in appts3])
+        self.assertIn("vết thương", reasons3.lower())
+        self.assertIn("cắt chỉ", reasons3.lower())
 
     def test_64_appointments_default_current_month(self):
         # Default query without `when` parameter must return `when="month"`
