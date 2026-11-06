@@ -334,6 +334,46 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(res_q.status_code, 200)
         self.assertGreater(len(res_q.content), 10000)
 
+    def test_70_ai_parse_intake(self):
+        text = "Bệnh nhân Trần Thị Lan sinh năm 1995 ở Ninh Vân, sđt 0987654321 nhổ răng R48 hết 500k đã trả 200k tiền mặt, hẹn 7 ngày sau tái khám"
+        res = self.c.post("/api/ai/parse-intake", json={"text": text}, headers=self.staff)
+        self.assertEqual(res.status_code, 200)
+        d = res.json()["data"]
+        self.assertIn("Trần Thị Lan", d["name"])
+        self.assertEqual(d["phone"], "0987654321")
+        self.assertEqual(d["yob"], 1995)
+        self.assertEqual(d["address"], "Ninh Vân")
+        self.assertEqual(d["cost"], 500000)
+        self.assertEqual(d["paid"], 200000)
+        self.assertEqual(d["method"], "Tiền mặt")
+        self.assertTrue(bool(d["next_date"]))
+
+    def test_71_ai_chat_query(self):
+        # Revenue query
+        res1 = self.c.post("/api/ai/chat", json={"message": "Doanh thu tháng này thế nào?"}, headers=self.staff)
+        self.assertEqual(res1.status_code, 200)
+        self.assertIn("Doanh Thu", res1.json()["reply"])
+
+        # Debt query
+        res2 = self.c.post("/api/ai/chat", json={"message": "Cho tôi danh sách ai đang nợ"}, headers=self.staff)
+        self.assertEqual(res2.status_code, 200)
+        self.assertIn("Nợ", res2.json()["reply"])
+
+    def test_72_admin_gemini_api_key_setting(self):
+        # Admin gets current settings
+        res = self.c.get("/api/admin/settings", headers=self.admin)
+        self.assertEqual(res.status_code, 200)
+        current = res.json()
+
+        # Update with gemini_api_key
+        current["gemini_api_key"] = "AIzaSyTestMockKey12345"
+        update_res = self.c.post("/api/admin/settings", json=current, headers=self.admin)
+        self.assertEqual(update_res.status_code, 200)
+
+        # Verify saved
+        res2 = self.c.get("/api/admin/settings", headers=self.admin)
+        self.assertEqual(res2.json()["gemini_api_key"], "AIzaSyTestMockKey12345")
+
     def test_99_logout_invalidates_token(self):
         h = self.login("letan", "abc123")
         self.assertEqual(self.c.post("/api/auth/logout", headers=h).status_code, 200)

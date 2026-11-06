@@ -2274,6 +2274,8 @@ async function loadClinicSettings() {
         document.getElementById('cfg-branches').value = (s.branches || []).join(', ');
         document.getElementById('cfg-categories').value = (s.categories || []).join(', ');
         document.getElementById('cfg-dentists').value = (s.dentists || []).join(', ');
+        const gemKeyEl = document.getElementById('cfg-gemini-key');
+        if (gemKeyEl) gemKeyEl.value = s.gemini_api_key || '';
     } catch (e) {
         showToast(e.message, 'error');
     }
@@ -2286,6 +2288,7 @@ async function saveClinicSettings() {
     const branches = document.getElementById('cfg-branches').value.split(',').map(x => x.trim()).filter(Boolean);
     const categories = document.getElementById('cfg-categories').value.split(',').map(x => x.trim()).filter(Boolean);
     const dentists = document.getElementById('cfg-dentists').value.split(',').map(x => x.trim()).filter(Boolean);
+    const geminiKey = document.getElementById('cfg-gemini-key')?.value.trim() || '';
 
     if (!name) {
         showToast('Tên phòng khám không được để trống', 'error');
@@ -2305,7 +2308,8 @@ async function saveClinicSettings() {
                 clinic_address: address,
                 branches: branches,
                 categories: categories,
-                dentists: dentists
+                dentists: dentists,
+                gemini_api_key: geminiKey
             }
         });
         showToast('Đã lưu toàn bộ cấu hình ứng dụng thành công!', 'success');
@@ -2573,4 +2577,291 @@ function toggleMobileSidebar() {
 function closeMobileSidebar() {
     const drawer = document.getElementById('mobile-sidebar-drawer');
     if (drawer) drawer.classList.add('hidden');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🤖 NIBI AI ASSISTANT: SMART INTAKE & CLINIC CHATBOT
+// ─────────────────────────────────────────────────────────────────────────────
+
+let currentSpeechRecognition = null;
+
+function startVoiceRecognition(targetInputId, micBtnId, autoSubmit = false) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        showToast('Trình duyệt hiện tại chưa hỗ trợ Web Speech API. Hãy dùng Chrome hoặc Safari.', 'warning');
+        return;
+    }
+
+    const inputEl = document.getElementById(targetInputId);
+    const micBtn = document.getElementById(micBtnId);
+
+    if (currentSpeechRecognition) {
+        try { currentSpeechRecognition.stop(); } catch (e) {}
+        currentSpeechRecognition = null;
+        if (micBtn) micBtn.classList.remove('text-rose-500', 'animate-pulse');
+        return;
+    }
+
+    try {
+        const recognition = new SpeechRecognition();
+        currentSpeechRecognition = recognition;
+        recognition.lang = 'vi-VN';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        if (micBtn) {
+            micBtn.classList.add('text-rose-500', 'animate-pulse');
+        }
+        showToast('🎙️ Đang nghe... Mời Bác sĩ nói tiếng Việt', 'info');
+
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            if (inputEl) {
+                inputEl.value = transcript;
+            }
+            showToast(`🎙️ Đã nhận diện: "${transcript}"`, 'success');
+            if (autoSubmit) {
+                if (targetInputId === 'ai-chat-input') {
+                    submitAiChatMessage();
+                } else if (targetInputId === 'ai-intake-input') {
+                    triggerAiIntakeParse();
+                }
+            }
+        };
+
+        recognition.onerror = (event) => {
+            console.warn('Speech recognition error:', event.error);
+            if (event.error !== 'no-speech') {
+                showToast(`Lỗi thu âm: ${event.error}`, 'error');
+            }
+        };
+
+        recognition.onend = () => {
+            currentSpeechRecognition = null;
+            if (micBtn) {
+                micBtn.classList.remove('text-rose-500', 'animate-pulse');
+            }
+        };
+
+        recognition.start();
+    } catch (err) {
+        console.error(err);
+        showToast('Không thể bật Micro: ' + err.message, 'error');
+        if (micBtn) micBtn.classList.remove('text-rose-500', 'animate-pulse');
+    }
+}
+
+async function triggerAiIntakeParse() {
+    const input = document.getElementById('ai-intake-input');
+    const text = input ? input.value.trim() : '';
+    if (!text) {
+        showToast('Vui lòng nhập hoặc nói câu mô tả bệnh nhân trước', 'warning');
+        return;
+    }
+
+    const statusEl = document.getElementById('ai-intake-status');
+    const btn = document.getElementById('ai-intake-btn');
+    if (statusEl) statusEl.classList.remove('hidden');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Đang xử lý</span>';
+    }
+
+    try {
+        const res = await api('/api/ai/parse-intake', {
+            method: 'POST',
+            body: { text: text }
+        });
+        if (res && res.data) {
+            const d = res.data;
+            if (d.name) document.getElementById('pm-name').value = d.name;
+            if (d.phone) document.getElementById('pm-phone').value = d.phone;
+            if (d.yob) {
+                document.getElementById('pm-yob').value = d.yob;
+                updateAgeFromYob();
+            } else if (d.age) {
+                document.getElementById('pm-age').value = d.age;
+                updateYobFromAge();
+            }
+            if (d.address) document.getElementById('pm-address').value = d.address;
+            if (d.branch) {
+                const branchSelect = document.getElementById('pm-branch');
+                if (branchSelect) branchSelect.value = d.branch;
+            }
+            if (d.category) {
+                const catSelect = document.getElementById('pm-category');
+                if (catSelect) catSelect.value = d.category;
+            }
+            if (d.procedure) document.getElementById('pm-proc').value = d.procedure;
+            if (d.tooth) document.getElementById('pm-tooth').value = d.tooth;
+            
+            // Cost and Paid in K (thousands VND)
+            if (d.cost !== undefined && d.cost !== null) {
+                document.getElementById('pm-cost').value = Math.round(d.cost / 1000);
+            }
+            if (d.paid !== undefined && d.paid !== null) {
+                document.getElementById('pm-paid').value = Math.round(d.paid / 1000);
+            }
+            if (d.method) {
+                const methSelect = document.getElementById('pm-method');
+                if (methSelect) methSelect.value = d.method;
+            }
+            if (d.next_date) document.getElementById('pm-next-date').value = d.next_date;
+            if (d.notes) document.getElementById('pm-note').value = d.notes;
+
+            // Recalculate debt
+            calculateDebt();
+
+            // Highlight filled fields with brief emerald glow
+            ['pm-name', 'pm-phone', 'pm-proc', 'pm-cost', 'pm-paid'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el.value) {
+                    el.classList.add('ring-2', 'ring-emerald-400', 'bg-emerald-50');
+                    setTimeout(() => el.classList.remove('ring-2', 'ring-emerald-400', 'bg-emerald-50'), 2500);
+                }
+            });
+
+            showToast('⚡ AI đã tự động điền các thông tin vào hồ sơ!', 'success');
+        }
+    } catch (e) {
+        showToast(e.message || 'Lỗi khi AI phân tích câu nói', 'error');
+    } finally {
+        if (statusEl) statusEl.classList.add('hidden');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-bolt"></i><span>Điền Tự Động</span>';
+        }
+    }
+}
+
+function toggleAiChatDrawer() {
+    const drawer = document.getElementById('ai-chat-drawer');
+    if (!drawer) return;
+    if (drawer.classList.contains('hidden')) {
+        drawer.classList.remove('hidden');
+        setTimeout(() => {
+            drawer.classList.remove('scale-95');
+            drawer.classList.add('scale-100');
+            document.getElementById('ai-chat-input')?.focus();
+        }, 10);
+    } else {
+        drawer.classList.remove('scale-100');
+        drawer.classList.add('scale-95');
+        setTimeout(() => drawer.classList.add('hidden'), 200);
+    }
+}
+
+function clearAiChat() {
+    const msgContainer = document.getElementById('ai-chat-messages');
+    if (!msgContainer) return;
+    msgContainer.innerHTML = `
+        <div class="flex gap-2.5 items-start">
+            <div class="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-robot"></i>
+            </div>
+            <div class="bg-white border border-slate-200 p-3 rounded-2xl rounded-tl-sm text-slate-800 shadow-sm space-y-2 max-w-[85%]">
+                <p class="font-semibold text-indigo-900">👋 Chào Bác sĩ Thắng & Nhân viên NiBi!</p>
+                <p class="text-slate-600 leading-relaxed">Đã xóa đoạn chat. Bác sĩ cần tra cứu thông tin gì?</p>
+                <div class="pt-1.5 border-t border-slate-100 flex flex-wrap gap-1.5">
+                    <button type="button" onclick="sendAiQuickPrompt('Doanh thu tháng này thế nào?')" class="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[11px] font-medium transition border border-indigo-200">
+                        📊 Doanh thu tháng này
+                    </button>
+                    <button type="button" onclick="sendAiQuickPrompt('Ai đang nợ nhiều nhất?')" class="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-[11px] font-medium transition border border-amber-200">
+                        💰 Ai nợ nhiều nhất?
+                    </button>
+                    <button type="button" onclick="sendAiQuickPrompt('Lịch hẹn hôm nay có ai?')" class="px-2 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg text-[11px] font-medium transition border border-teal-200">
+                        📅 Lịch hẹn hôm nay
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function sendAiQuickPrompt(prompt) {
+    const input = document.getElementById('ai-chat-input');
+    if (input) {
+        input.value = prompt;
+        submitAiChatMessage();
+    }
+}
+
+function formatAiMarkdown(text) {
+    if (!text) return '';
+    return text
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/`(.*?)`/g, '<code class="px-1 py-0.5 bg-slate-100 text-indigo-700 font-mono rounded">$1</code>')
+        .replace(/\n/g, '<br>');
+}
+
+async function submitAiChatMessage() {
+    const input = document.getElementById('ai-chat-input');
+    const msg = input ? input.value.trim() : '';
+    if (!msg) return;
+
+    input.value = '';
+    const container = document.getElementById('ai-chat-messages');
+
+    // Add user message bubble
+    const userDiv = document.createElement('div');
+    userDiv.className = 'flex justify-end';
+    userDiv.innerHTML = `
+        <div class="bg-indigo-600 text-white px-3.5 py-2.5 rounded-2xl rounded-tr-sm shadow-sm max-w-[85%] text-xs leading-relaxed">
+            ${msg.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}
+        </div>
+    `;
+    container.appendChild(userDiv);
+
+    // Add typing indicator
+    const typingDiv = document.createElement('div');
+    typingDiv.id = 'ai-typing-indicator';
+    typingDiv.className = 'flex gap-2.5 items-start';
+    typingDiv.innerHTML = `
+        <div class="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
+            <i class="fa-solid fa-robot"></i>
+        </div>
+        <div class="bg-white border border-slate-200 px-3 py-2 rounded-2xl rounded-tl-sm text-slate-500 shadow-sm flex items-center gap-1.5 text-xs">
+            <i class="fa-solid fa-spinner fa-spin text-indigo-600"></i>
+            <span>AI đang tra cứu dữ liệu...</span>
+        </div>
+    `;
+    container.appendChild(typingDiv);
+    container.scrollTop = container.scrollHeight;
+
+    try {
+        const res = await api('/api/ai/chat', {
+            method: 'POST',
+            body: { message: msg }
+        });
+        typingDiv.remove();
+
+        const aiDiv = document.createElement('div');
+        aiDiv.className = 'flex gap-2.5 items-start';
+        aiDiv.innerHTML = `
+            <div class="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-robot"></i>
+            </div>
+            <div class="bg-white border border-slate-200 p-3 rounded-2xl rounded-tl-sm text-slate-800 shadow-sm space-y-1.5 max-w-[85%] text-xs leading-relaxed">
+                ${formatAiMarkdown(res.reply || '')}
+            </div>
+        `;
+        container.appendChild(aiDiv);
+    } catch (e) {
+        typingDiv.remove();
+        const errDiv = document.createElement('div');
+        errDiv.className = 'flex gap-2.5 items-start';
+        errDiv.innerHTML = `
+            <div class="w-7 h-7 rounded-lg bg-rose-500 text-white flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <div class="bg-rose-50 border border-rose-200 p-2.5 rounded-2xl rounded-tl-sm text-rose-700 shadow-sm text-xs">
+                ${e.message || 'Lỗi kết nối tới Trợ lý AI'}
+            </div>
+        `;
+        container.appendChild(errDiv);
+    } finally {
+        container.scrollTop = container.scrollHeight;
+    }
 }
