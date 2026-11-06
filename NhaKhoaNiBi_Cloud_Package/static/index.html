@@ -827,6 +827,23 @@
                                            class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold focus:bg-white focus:border-teal-500 outline-none text-sm"
                                            placeholder="Thắng">
                                 </div>
+
+                                <div class="pt-3 border-t border-slate-100">
+                                    <div class="flex items-center gap-2 mb-1.5">
+                                        <span class="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs">
+                                            <i class="fa-solid fa-brain"></i>
+                                        </span>
+                                        <label class="block text-xs font-bold uppercase text-slate-700">
+                                            Khóa Google Gemini API Key (Tùy chọn)
+                                        </label>
+                                    </div>
+                                    <input type="password" id="cfg-gemini-key"
+                                           class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-mono text-xs focus:bg-white focus:border-indigo-500 outline-none"
+                                           placeholder="AIzaSy... (Nếu không nhập, hệ thống sẽ dùng AI thông minh nội bộ miễn phí)">
+                                    <p class="text-[11px] text-slate-400 mt-1">
+                                        💡 Nhập Google Gemini API Key để kích hoạt trí tuệ nhân tạo Gemini 1.5 Flash trả lời tự nhiên mọi câu hỏi về lâm sàng và phòng khám.
+                                    </p>
+                                </div>
                             </div>
 
                             <div class="pt-4 flex items-center justify-end">
@@ -972,6 +989,42 @@
             <!-- Modal Form Body -->
             <form id="patient-form" class="p-5 overflow-y-auto custom-scrollbar space-y-4 flex-1">
                 <input type="hidden" id="pm-id" value="">
+
+                <!-- AI SMART INTAKE ASSISTANT -->
+                <div id="ai-intake-banner" class="bg-gradient-to-r from-indigo-50 via-teal-50 to-emerald-50 border border-indigo-200/80 rounded-2xl p-3.5 shadow-sm">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center gap-2">
+                            <span class="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs shadow-sm">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                            </span>
+                            <span class="text-xs font-bold text-indigo-950 uppercase tracking-wide">Trợ Lý AI Nhập Liệu Tự Động (Gõ hoặc Nói)</span>
+                        </div>
+                        <span class="text-[11px] font-medium text-indigo-600 bg-white/70 px-2 py-0.5 rounded-full border border-indigo-100 hidden sm:inline">
+                            ⚡ Bóc tách tự động tiếng Việt
+                        </span>
+                    </div>
+                    <div class="flex gap-2 items-center">
+                        <div class="relative flex-1">
+                            <input type="text" id="ai-intake-input"
+                                   onkeydown="if(event.key==='Enter'){event.preventDefault();triggerAiIntakeParse();}"
+                                   placeholder="VD: Chị Lan 1995 ở Ninh Vân, 0987654321 nhổ răng R48 hết 500k trả 200k tiền mặt, hẹn 7 ngày sau..."
+                                   class="w-full pl-3 pr-10 py-2.5 bg-white border border-indigo-200 rounded-xl text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm">
+                            <button type="button" id="ai-intake-mic-btn" onclick="startVoiceRecognition('ai-intake-input', 'ai-intake-mic-btn')" title="Nói qua Micro"
+                                    class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500 p-1.5 text-sm transition rounded-lg hover:bg-slate-100">
+                                <i class="fa-solid fa-microphone"></i>
+                            </button>
+                        </div>
+                        <button type="button" id="ai-intake-btn" onclick="triggerAiIntakeParse()"
+                                class="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-teal-600 hover:from-indigo-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-indigo-600/20 active:scale-95 transition whitespace-nowrap">
+                            <i class="fa-solid fa-bolt"></i>
+                            <span>Điền Tự Động</span>
+                        </button>
+                    </div>
+                    <div id="ai-intake-status" class="hidden text-xs text-indigo-700 mt-2 font-medium flex items-center gap-2">
+                        <i class="fa-solid fa-spinner fa-spin"></i>
+                        <span>AI đang phân tích câu nói và tự động điền toàn bộ các ô bên dưới...</span>
+                    </div>
+                </div>
 
                 <!-- Section: Hành chính -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -1731,10 +1784,93 @@
         </div>
     </div>
 
+    <!-- 12. FLOATING AI ASSISTANT CHATBOT & TOGGLE BUTTON -->
+    <div id="ai-chat-drawer" class="hidden fixed bottom-20 md:bottom-24 right-4 md:right-6 z-40 w-[calc(100vw-2rem)] sm:w-96 max-h-[82vh] h-[520px] bg-white rounded-2xl shadow-2xl border border-indigo-100 flex flex-col overflow-hidden transition-all duration-300 transform scale-95 origin-bottom-right">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-indigo-700 via-indigo-800 to-teal-700 px-4 py-3 text-white flex items-center justify-between flex-shrink-0 shadow-md">
+            <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-white/20 border border-white/30 flex items-center justify-center text-white text-base shadow-inner">
+                    <i class="fa-solid fa-robot"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h4 class="font-extrabold text-sm text-white">Trợ Lý AI NiBi</h4>
+                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Online
+                        </span>
+                    </div>
+                    <p class="text-[11px] text-indigo-200">Hỏi đáp doanh thu, công nợ & lịch hẹn</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-1">
+                <button type="button" onclick="clearAiChat()" class="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 text-xs" title="Xóa hội thoại">
+                    <i class="fa-solid fa-trash-can"></i>
+                </button>
+                <button type="button" onclick="toggleAiChatDrawer()" class="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 text-sm" title="Thu nhỏ">
+                    <i class="fa-solid fa-chevron-down"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Chat messages container -->
+        <div id="ai-chat-messages" class="flex-1 p-3.5 overflow-y-auto custom-scrollbar space-y-3 bg-slate-50/70 text-xs">
+            <!-- Initial AI Greeting -->
+            <div class="flex gap-2.5 items-start">
+                <div class="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
+                    <i class="fa-solid fa-robot"></i>
+                </div>
+                <div class="bg-white border border-slate-200 p-3 rounded-2xl rounded-tl-sm text-slate-800 shadow-sm space-y-2 max-w-[85%]">
+                    <p class="font-semibold text-indigo-900">👋 Chào Bác sĩ Thắng & Nhân viên NiBi!</p>
+                    <p class="text-slate-600 leading-relaxed">Tôi là Trợ lý AI của phòng khám. Tôi có thể giúp Bác sĩ tra cứu doanh thu, danh sách nợ, lịch hẹn hôm nay hoặc giải đáp thắc mắc.</p>
+                    <div class="pt-1.5 border-t border-slate-100 flex flex-wrap gap-1.5">
+                        <button type="button" onclick="sendAiQuickPrompt('Doanh thu tháng này thế nào?')" class="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[11px] font-medium transition border border-indigo-200">
+                            📊 Doanh thu tháng này
+                        </button>
+                        <button type="button" onclick="sendAiQuickPrompt('Ai đang nợ nhiều nhất?')" class="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-[11px] font-medium transition border border-amber-200">
+                            💰 Ai nợ nhiều nhất?
+                        </button>
+                        <button type="button" onclick="sendAiQuickPrompt('Lịch hẹn hôm nay có ai?')" class="px-2 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg text-[11px] font-medium transition border border-teal-200">
+                            📅 Lịch hẹn hôm nay
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input bar -->
+        <div class="p-2.5 bg-white border-t border-slate-200 flex-shrink-0">
+            <form id="ai-chat-form" onsubmit="event.preventDefault(); submitAiChatMessage();" class="flex items-center gap-1.5">
+                <div class="relative flex-1">
+                    <input type="text" id="ai-chat-input"
+                           placeholder="Hỏi AI bất kỳ điều gì về phòng khám..."
+                           class="w-full pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    <button type="button" id="ai-chat-mic-btn" onclick="startVoiceRecognition('ai-chat-input', 'ai-chat-mic-btn', true)"
+                            class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500 p-1 text-xs" title="Thu âm giọng nói">
+                        <i class="fa-solid fa-microphone"></i>
+                    </button>
+                </div>
+                <button type="submit" id="ai-chat-send-btn"
+                        class="w-9 h-9 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl flex items-center justify-center text-xs shadow-md shadow-indigo-600/30 transition flex-shrink-0">
+                    <i class="fa-solid fa-paper-plane"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- AI FLOATING ACTION BUTTON (TOGGLE) -->
+    <button id="ai-chat-toggle-btn" type="button" onclick="toggleAiChatDrawer()"
+            class="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-30 flex items-center gap-2 px-3.5 py-3 rounded-full bg-gradient-to-r from-indigo-600 via-indigo-700 to-teal-600 text-white shadow-xl shadow-indigo-600/30 hover:shadow-indigo-600/50 hover:scale-105 active:scale-95 transition-all group">
+        <span class="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-sm">
+            <i class="fa-solid fa-robot"></i>
+        </span>
+        <span class="font-extrabold text-xs tracking-wide pr-1 hidden sm:inline">Trợ Lý AI NiBi</span>
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping sm:block hidden"></span>
+    </button>
+
     <!-- TOAST NOTIFICATION CONTAINER -->
     <div id="toast-container" class="fixed bottom-20 md:bottom-6 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-sm"></div>
 
     <!-- App JavaScript -->
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=ai1.0"></script>
 </body>
 </html>

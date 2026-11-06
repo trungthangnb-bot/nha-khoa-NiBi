@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from . import db as dbm
 from .db import APPT_KINDS, APPT_STATUSES, BRANCHES, CATEGORIES, METHODS, db, patient_search_text
 from .excel_exporter import generate_nibi_excel_workbook
+from .ai_assistant import parse_intake_with_ai, answer_clinic_query
 from .security import Limiter, hash_secret, new_token, token_digest, verify_secret
 from .textutil import clean, strip_accents
 
@@ -1138,6 +1139,7 @@ class ClinicSettingsIn(BaseModel):
     branches: list[str] = Field(default_factory=list)
     categories: list[str] = Field(default_factory=list)
     dentists: list[str] = Field(default_factory=list)
+    gemini_api_key: str = Field(default="", max_length=200)
 
 
 @app.get("/api/admin/settings")
@@ -1159,6 +1161,7 @@ def get_app_settings(user=Depends(admin_only)):
             "branches": get_val("branches", BRANCHES),
             "categories": get_val("categories", CATEGORIES),
             "dentists": get_val("dentists", ["Thắng"]),
+            "gemini_api_key": get_val("gemini_api_key", ""),
         }
 
 
@@ -1182,9 +1185,33 @@ def update_app_settings(data: ClinicSettingsIn, user=Depends(admin_only)):
         set_val("branches", clean_branches)
         set_val("categories", clean_cats)
         set_val("dentists", clean_dentists)
+        set_val("gemini_api_key", clean(data.gemini_api_key))
 
         audit(conn, user, "settings_update", summary="Cập nhật cấu hình phòng khám & ứng dụng")
     return {"ok": True}
+
+
+# ───────────────────────── AI ASSISTANT ─────────────────────────
+class AiIntakeIn(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class AiChatIn(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+
+
+@app.post("/api/ai/parse-intake")
+def api_ai_parse_intake(data: AiIntakeIn, user=Depends(current_user)):
+    """Bóc tách văn bản tự nhiên / giọng nói để tự động điền hồ sơ bệnh nhân."""
+    parsed = parse_intake_with_ai(data.text)
+    return {"ok": True, "data": parsed}
+
+
+@app.post("/api/ai/chat")
+def api_ai_chat(data: AiChatIn, user=Depends(current_user)):
+    """Trợ lý AI hỏi đáp dữ liệu phòng khám thời gian thực."""
+    result = answer_clinic_query(data.message)
+    return {"ok": True, **result}
 
 
 @app.get("/api/admin/backup.db")
