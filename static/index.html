@@ -1846,15 +1846,17 @@
             <form id="ai-chat-form" onsubmit="event.preventDefault(); submitAiChatMessage();" class="flex items-center gap-1.5">
                 <div class="relative flex-1">
                     <input type="text" id="ai-chat-input"
-                           placeholder="Hỏi AI bất kỳ điều gì về phòng khám..."
-                           class="w-full pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                           onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitAiChatMessage();}"
+                           placeholder="Hỏi AI bất kỳ điều gì (VD: Bệnh nhân Lan ở đâu, Lịch hẹn, Nợ...)"
+                           class="w-full pl-3 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
                     <button type="button" id="ai-chat-mic-btn" onclick="startVoiceRecognition('ai-chat-input', 'ai-chat-mic-btn', true)"
                             class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500 p-1 text-xs" title="Thu âm giọng nói">
                         <i class="fa-solid fa-microphone"></i>
                     </button>
                 </div>
                 <button type="submit" id="ai-chat-send-btn"
-                        class="w-9 h-9 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl flex items-center justify-center text-xs shadow-md shadow-indigo-600/30 transition flex-shrink-0">
+                        class="w-9 h-9 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl flex items-center justify-center text-xs shadow-md shadow-indigo-600/30 transition flex-shrink-0"
+                        title="Gửi câu hỏi (hoặc ấn Enter)">
                     <i class="fa-solid fa-paper-plane"></i>
                 </button>
             </form>
@@ -1875,6 +1877,6 @@
     <div id="toast-container" class="fixed bottom-20 md:bottom-6 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-sm"></div>
 
     <!-- App JavaScript -->
-    <script src="/static/app.js?v=ai1.0"></script>
+    <script src="/static/app.js?v=ai1.2"></script>
 </body>
 </html>

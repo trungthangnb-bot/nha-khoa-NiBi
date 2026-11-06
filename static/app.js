@@ -2734,11 +2734,58 @@ async function triggerAiIntakeParse() {
     }
 }
 
+function renderAiWelcomeMessage(isCleared = false) {
+    const isAdmin = state.user?.role === 'admin';
+    const roleGreeting = isAdmin ? 'Bác sĩ Thắng' : 'Nhân viên';
+    const subText = isCleared 
+        ? 'Đã làm mới cuộc trò chuyện. Bạn cần tra cứu thông tin gì?' 
+        : 'Tôi có thể hỗ trợ tra cứu hồ sơ bệnh nhân, tìm số điện thoại, xem tiền nợ, lịch hẹn' + (isAdmin ? ' và báo cáo doanh thu phòng khám.' : '.');
+
+    let chipsHtml = `
+        <button type="button" onclick="sendAiQuickPrompt('Thông tin bệnh nhân ')" class="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[11px] font-medium transition border border-indigo-200">
+            🔍 Tra cứu bệnh nhân
+        </button>
+        <button type="button" onclick="sendAiQuickPrompt('Ai đang nợ nhiều nhất?')" class="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-[11px] font-medium transition border border-amber-200">
+            💰 Ai nợ nhiều nhất?
+        </button>
+        <button type="button" onclick="sendAiQuickPrompt('Lịch hẹn hôm nay có ai?')" class="px-2 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg text-[11px] font-medium transition border border-teal-200">
+            📅 Lịch hẹn hôm nay
+        </button>
+    `;
+
+    if (isAdmin) {
+        chipsHtml = `
+            <button type="button" onclick="sendAiQuickPrompt('Doanh thu tháng này thế nào?')" class="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg text-[11px] font-medium transition border border-emerald-200">
+                📊 Doanh thu tháng này
+            </button>
+        ` + chipsHtml;
+    }
+
+    return `
+        <div class="flex gap-2.5 items-start">
+            <div class="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-robot"></i>
+            </div>
+            <div class="bg-white border border-slate-200 p-3 rounded-2xl rounded-tl-sm text-slate-800 shadow-sm space-y-2 max-w-[85%]">
+                <p class="font-semibold text-indigo-900">👋 Chào ${roleGreeting}!</p>
+                <p class="text-slate-600 leading-relaxed">${subText}</p>
+                <div class="pt-1.5 border-t border-slate-100 flex flex-wrap gap-1.5">
+                    ${chipsHtml}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 function toggleAiChatDrawer() {
     const drawer = document.getElementById('ai-chat-drawer');
     if (!drawer) return;
     if (drawer.classList.contains('hidden')) {
         drawer.classList.remove('hidden');
+        const msgContainer = document.getElementById('ai-chat-messages');
+        if (msgContainer && (!msgContainer.children.length || msgContainer.children.length === 1)) {
+            msgContainer.innerHTML = renderAiWelcomeMessage(false);
+        }
         setTimeout(() => {
             drawer.classList.remove('scale-95');
             drawer.classList.add('scale-100');
@@ -2754,28 +2801,7 @@ function toggleAiChatDrawer() {
 function clearAiChat() {
     const msgContainer = document.getElementById('ai-chat-messages');
     if (!msgContainer) return;
-    msgContainer.innerHTML = `
-        <div class="flex gap-2.5 items-start">
-            <div class="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
-                <i class="fa-solid fa-robot"></i>
-            </div>
-            <div class="bg-white border border-slate-200 p-3 rounded-2xl rounded-tl-sm text-slate-800 shadow-sm space-y-2 max-w-[85%]">
-                <p class="font-semibold text-indigo-900">👋 Chào Bác sĩ Thắng & Nhân viên NiBi!</p>
-                <p class="text-slate-600 leading-relaxed">Đã xóa đoạn chat. Bác sĩ cần tra cứu thông tin gì?</p>
-                <div class="pt-1.5 border-t border-slate-100 flex flex-wrap gap-1.5">
-                    <button type="button" onclick="sendAiQuickPrompt('Doanh thu tháng này thế nào?')" class="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[11px] font-medium transition border border-indigo-200">
-                        📊 Doanh thu tháng này
-                    </button>
-                    <button type="button" onclick="sendAiQuickPrompt('Ai đang nợ nhiều nhất?')" class="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-[11px] font-medium transition border border-amber-200">
-                        💰 Ai nợ nhiều nhất?
-                    </button>
-                    <button type="button" onclick="sendAiQuickPrompt('Lịch hẹn hôm nay có ai?')" class="px-2 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg text-[11px] font-medium transition border border-teal-200">
-                        📅 Lịch hẹn hôm nay
-                    </button>
-                </div>
-            </div>
-        </div>
-    `;
+    msgContainer.innerHTML = renderAiWelcomeMessage(true);
 }
 
 function sendAiQuickPrompt(prompt) {

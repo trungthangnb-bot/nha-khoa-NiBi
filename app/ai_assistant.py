@@ -13,6 +13,7 @@ import urllib.request
 import urllib.error
 
 from .db import db
+from .textutil import strip_accents, clean
 
 KNOWN_ADDRESSES = [
     "Xí Nghiệp", "Xuân Vũ", "Hệ", "Phú Lăng", "Thượng", "Dưỡng Thượng",
@@ -260,26 +261,174 @@ Trả về định dạng JSON thuần túy với các trường:
     # Fallback rule-based
     return parse_intake_fallback(text)
 
-def answer_clinic_query(message: str, api_key: str = "") -> dict:
-    """Answers clinic queries using real database context."""
+def lookup_patient_records(conn, query: str):
+    """Tìm kiếm hồ sơ bệnh nhân theo tên, số điện thoại hoặc mã bệnh nhân."""
+    q = query.strip()
+    # 1. Phone number match
+    phone_m = re.search(r'(0[3|5|7|8|9]\d{7,8})', q)
+    if phone_m:
+        return conn.execute(
+            """SELECT id, code, name, phone, phone_note, yob, address, branch, notes 
+               FROM patients 
+               WHERE phone LIKE ? 
+               ORDER BY id DESC LIMIT 5""",
+            (f"%{phone_m.group(1)}%",)
+        ).fetchall()
+
+    # 2. Patient code match
+    code_m = re.search(r'(BN-\d+)', q, re.IGNORECASE)
+    if code_m:
+        return conn.execute(
+            """SELECT id, code, name, phone, phone_note, yob, address, branch, notes 
+               FROM patients 
+               WHERE code LIKE ? 
+               ORDER BY id DESC LIMIT 5""",
+            (f"%{code_m.group(1)}%",)
+        ).fetchall()
+
+    lower_q = q.lower()
+    patient_triggers = [
+        "bệnh nhân", "bn", "khách", "hồ sơ", "thông tin", "tìm", "tra cứu", 
+        "sđt", "số điện thoại", "điều trị", "anh", "chị", "cô", "chú", "bác", "em"
+    ]
+    is_patient_query = any(t in lower_q for t in patient_triggers)
+
+    cleaned = re.sub(
+        r'(?:thông tin|hồ sơ|lịch sử|tìm|tra cứu|cho tôi|hỏi về|xem|bệnh nhân|bn|khách hàng|khách|anh|chị|cô|chú|bác|em|ở đâu|bao nhiêu|nợ|sđt|số điện thoại|của|\?|:)', 
+        ' ', 
+        lower_q
+    ).strip()
+
+    if cleaned and len(cleaned) >= 2:
+        norm = strip_accents(cleaned)
+        # Search by exact name substring or normalized search_text
+        rows = conn.execute(
+            """SELECT id, code, name, phone, phone_note, yob, address, branch, notes 
+               FROM patients 
+               WHERE name LIKE ? OR search_text LIKE ?
+               ORDER BY (CASE WHEN name LIKE ? THEN 0 ELSE 1 END), id DESC
+               LIMIT 5""",
+            (f"%{cleaned}%", f"%{norm}%", f"%{cleaned}%")
+        ).fetchall()
+        if rows:
+            return rows
+
+        words = [w for w in norm.split() if len(w) >= 2]
+        if words:
+            like_sql = " AND ".join(["search_text LIKE ?" for _ in words])
+            params = [f"%{w}%" for w in words]
+            rows = conn.execute(
+                f"""SELECT id, code, name, phone, phone_note, yob, address, branch, notes 
+                   FROM patients 
+                   WHERE {like_sql} 
+                   ORDER BY id DESC LIMIT 5""",
+                params
+            ).fetchall()
+            if rows:
+                return rows
+
+    return []
+
+def format_single_patient_card(conn, p, today_str: str) -> str:
+    """Định dạng thẻ chi tiết bệnh nhân kèm lịch sử điều trị và lịch hẹn."""
+    p_id = p[0]
+    p_code = p[1]
+    p_name = p[2]
+    p_phone = p[3]
+    p_phone_note = p[4]
+    p_yob = p[5]
+    p_address = p[6]
+    p_branch = p[7]
+    p_notes = p[8]
+
+    current_year = dt.date.today().year
+    age_str = f" ({current_year - p_yob} tuổi)" if p_yob else ""
+    yob_str = f"SN {p_yob}{age_str}" if p_yob else "Chưa có năm sinh"
+    phone_display = p_phone or "Chưa có SĐT"
+    if p_phone_note:
+        phone_display += f" ({p_phone_note})"
+
+    tp_rows = conn.execute("""
+        WITH tp AS (
+            SELECT t.id, t.procedure, t.cost, t.visit_date, t.dentist,
+                   COALESCE((SELECT SUM(amount) FROM payments WHERE treatment_id = t.id), 0) as paid
+            FROM treatments t
+            WHERE t.patient_id = ?
+            ORDER BY t.visit_date DESC, t.id DESC
+        )
+        SELECT procedure, cost, paid, MAX(cost - paid, 0) as debt, visit_date, dentist FROM tp
+    """, (p_id,)).fetchall()
+
+    total_cost = sum(r[1] for r in tp_rows)
+    total_paid = sum(r[2] for r in tp_rows)
+    total_debt = sum(r[3] for r in tp_rows)
+
+    appt_row = conn.execute("""
+        SELECT appt_date, appt_time, reason, branch FROM appointments
+        WHERE patient_id = ? AND appt_date >= ?
+        ORDER BY appt_date ASC, appt_time ASC LIMIT 1
+    """, (p_id, today_str)).fetchone()
+
+    lines = [
+        f"👤 **Hồ Sơ Bệnh Nhân: {p_name}** (`{p_code}`)",
+        f"- 📞 **SĐT:** `{phone_display}`",
+        f"- 🎂 **Năm sinh:** {yob_str}",
+        f"- 📍 **Địa chỉ:** {p_address or 'Chưa cập nhật'} (Cơ sở tiếp đón: **{p_branch}**)",
+        f"- 💰 **Tài chính:** Tổng chi phí `{total_cost/1000:,.1f}K` | Đã trả `{total_paid/1000:,.1f}K` | **Còn nợ: `{total_debt/1000:,.1f}K`**"
+    ]
+    if tp_rows:
+        lines.append("- 🦷 **Lịch sử điều trị:**")
+        for r in tp_rows[:4]:
+            cost_k = f"{r[1]/1000:,.0f}K"
+            debt_k = f"(còn nợ {r[3]/1000:,.0f}K)" if r[3] > 0 else "(đã trả đủ)"
+            lines.append(f"  • *{r[4] or 'Mới'}:* {r[0]} (BS. {r[5] or 'Thắng'}) — {cost_k} {debt_k}")
+        if len(tp_rows) > 4:
+            lines.append(f"  *(và {len(tp_rows) - 4} đợt điều trị trước đó...)*")
+    else:
+        lines.append("- 🦷 Chưa có lịch sử điều trị.")
+
+    if appt_row:
+        lines.append(f"- 📅 **Lịch hẹn tiếp theo:** Ngày `{appt_row[0]}` ({appt_row[1] or 'trong ngày'}) — *{appt_row[2]}* (CS {appt_row[3]})")
+    if p_notes:
+        lines.append(f"- 📝 **Ghi chú:** {p_notes}")
+
+    return "\n".join(lines)
+
+def answer_clinic_query(message: str, api_key: str = "", is_admin: bool = False) -> dict:
+    """Answers clinic queries using real database context with RBAC security and patient search."""
     today_str = dt.date.today().isoformat()
     current_month_str = dt.date.today().strftime("%Y-%m")
+    lower = message.lower()
+
+    # 1. PHÂN QUYỀN DOANH THU: Chặn tài khoản nhân viên thường hỏi về doanh thu
+    revenue_keywords = ["doanh thu", "thu nhập", "tiền thu", "doanh số", "tổng thu", "lợi nhuận", "lãi", "tháng này thu"]
+    if not is_admin and any(k in lower for k in revenue_keywords):
+        return {
+            "reply": (
+                "🔒 **Bảo Mật Tài Chính:**\n"
+                "Thông tin doanh thu và tài chính phòng khám là dữ liệu nội bộ được bảo mật, **chỉ dành riêng cho tài khoản Admin (Bác sĩ Thắng)**.\n\n"
+                "💡 *Bạn có thể tra cứu thông tin hồ sơ bệnh nhân, tìm số điện thoại, xem tiền nợ của bệnh nhân hoặc lịch hẹn tái khám.*"
+            ),
+            "source": "rbac_restricted"
+        }
 
     # Fetch live database snapshot
     with db() as conn:
         conn.row_factory = None
         total_patients = conn.execute("SELECT COUNT(id) FROM patients").fetchone()[0]
-        
-        # Monthly revenue
-        rev_row = conn.execute("""
-            SELECT 
-                COALESCE(SUM(amount), 0),
-                COALESCE(SUM(CASE WHEN method LIKE '%Tiền mặt%' THEN amount ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN method LIKE '%Chuyển khoản%' THEN amount ELSE 0 END), 0)
-            FROM payments
-            WHERE paid_on LIKE ?
-        """, (current_month_str + '%',)).fetchone()
-        month_total, month_cash, month_transfer = rev_row
+
+        # Monthly revenue (chỉ tính nếu là admin)
+        month_total, month_cash, month_transfer = 0, 0, 0
+        if is_admin:
+            rev_row = conn.execute("""
+                SELECT 
+                    COALESCE(SUM(amount), 0),
+                    COALESCE(SUM(CASE WHEN method LIKE '%Tiền mặt%' THEN amount ELSE 0 END), 0),
+                    COALESCE(SUM(CASE WHEN method LIKE '%Chuyển khoản%' THEN amount ELSE 0 END), 0)
+                FROM payments
+                WHERE paid_on LIKE ?
+            """, (current_month_str + '%',)).fetchone()
+            month_total, month_cash, month_transfer = rev_row
 
         # Total debt
         debt_total = conn.execute("""
@@ -322,36 +471,72 @@ def answer_clinic_query(message: str, api_key: str = "") -> dict:
             ORDER BY a.appt_time ASC
         """, (today_str,)).fetchall()
 
+        # Check for Patient Search
+        matched_patients = lookup_patient_records(conn, message)
+        patient_context = ""
+        if matched_patients:
+            if len(matched_patients) == 1:
+                patient_context = format_single_patient_card(conn, matched_patients[0], today_str)
+            else:
+                card_list = []
+                for p in matched_patients:
+                    p_phone = p[3] or "Không có SĐT"
+                    p_addr = p[6] or "Chưa có địa chỉ"
+                    card_list.append(f"- **{p[2]}** (`{p[1]}`): SĐT `{p_phone}` — {p_addr} (CS {p[7]})")
+                patient_context = (
+                    f"🔍 **Tìm thấy {len(matched_patients)} bệnh nhân phù hợp:**\n"
+                    + "\n".join(card_list)
+                    + "\n\n💡 *Bác sĩ hãy hỏi cụ thể hơn (ví dụ: 'thông tin của " + matched_patients[0][2] + "') để xem đầy đủ hồ sơ và tiền nợ.*"
+                )
+
+    # 2. Xử lý qua Google Gemini API nếu có key
     key = api_key or get_gemini_api_key()
     if key:
-        db_context = f"""DỮ LIỆU HIỆN TẠI PHÒNG KHÁM NHA KHOA NIBI (Hôm nay: {today_str}):
-- Tổng số bệnh nhân: {total_patients} người
-- Doanh thu tháng {current_month_str}: {month_total/1000:,.1f}K ({month_total:,.0f} VNĐ)
-  + Tiền mặt: {month_cash/1000:,.1f}K
-  + Chuyển khoản: {month_transfer/1000:,.1f}K
-- Tổng công nợ: {debt_total/1000:,.1f}K ({debt_total:,.0f} VNĐ) của {debt_patients_count} bệnh nhân
-- Top 5 người nợ nhiều nhất: {', '.join(f'{d[0]} ({d[1] or "k sđt"} - {d[2]} nợ {d[3]/1000:,.0f}K)' for d in top_debtors)}
-- Lịch hẹn hôm nay ({len(appts_today)} ca): {', '.join(f'{a[0]} ({a[2] or "cả ngày"} - {a[3]} tại {a[4]})' for a in appts_today) if appts_today else 'Không có lịch hẹn hôm nay'}
-"""
+        db_context_parts = [
+            f"DỮ LIỆU THỜI GIAN THỰC NHA KHOA NIBI (Hôm nay: {today_str}):",
+            f"- Tổng số bệnh nhân: {total_patients} người"
+        ]
+        if is_admin:
+            db_context_parts.append(
+                f"- Doanh thu tháng {current_month_str}: {month_total/1000:,.1f}K ({month_total:,.0f} VNĐ) [Tiền mặt: {month_cash/1000:,.1f}K, Chuyển khoản: {month_transfer/1000:,.1f}K]"
+            )
+        else:
+            db_context_parts.append("- (Lưu ý bảo mật: Tài khoản người dùng không phải Admin, KHÔNG có quyền truy cập doanh thu)")
+
+        appts_summary = ', '.join(f"{a[0]} ({a[2] or 'cả ngày'} - {a[3]})" for a in appts_today) if appts_today else 'Không có lịch hẹn'
+        db_context_parts.extend([
+            f"- Tổng công nợ: {debt_total/1000:,.1f}K của {debt_patients_count} bệnh nhân",
+            f"- Top nợ: {', '.join(f'{d[0]} ({d[3]/1000:,.0f}K)' for d in top_debtors)}",
+            f"- Lịch hẹn hôm nay ({len(appts_today)} ca): {appts_summary}"
+        ])
+        if patient_context:
+            db_context_parts.append(f"\nKẾT QUẢ TRA CỨU HỒ SƠ BỆNH NHÂN TRONG CSDL:\n{patient_context}")
+
+        db_context = "\n".join(db_context_parts)
         sys_prompt = f"""Bạn là Trợ Lý AI Chuyên Nghiệp của Nha Khoa NiBi (BS. Thắng).
-Dựa vào dữ liệu thời gian thực sau đây của phòng khám:
+Dữ liệu thời gian thực từ CSDL:
 {db_context}
-Hãy trả lời câu hỏi của Bác sĩ hoặc nhân viên một cách ngắn gọn, súc tích, chính xác, lịch sự và thân thiện bằng tiếng Việt.
-Số tiền nên định dạng ngắn gọn theo đơn vị K (1K = 1.000 VNĐ) kèm số VNĐ nếu cần.
+Quy tắc:
+1. Trả lời súc tích, chính xác, lịch sự, đúng sự thật.
+2. {'Nếu người dùng hỏi về doanh thu thì trả lời đầy đủ.' if is_admin else 'Người dùng là nhân viên: TUYỆT ĐỐI từ chối cung cấp bất kỳ số liệu doanh thu nào.'}
+3. Nếu người dùng hỏi về thông tin bệnh nhân, sử dụng thông tin bệnh nhân đã tìm được ở trên để trả lời đầy đủ.
 """
         reply = call_gemini_api(message, system_instruction=sys_prompt, api_key=key)
         if reply:
             return {"reply": reply, "source": "gemini"}
 
-    # Fallback Intent Matching
-    lower = message.lower()
-    if any(k in lower for k in ["doanh thu", "thu nhập", "tiền thu", "tháng này"]):
+    # 3. Fallback Local NLP
+    # Nếu có kết quả tra cứu bệnh nhân
+    if patient_context:
+        return {"reply": patient_context, "source": "patient_lookup"}
+
+    if is_admin and any(k in lower for k in revenue_keywords):
         reply = (
             f"📊 **Báo Cáo Doanh Thu Tháng {current_month_str}:**\n"
             f"- **Tổng thực thu:** `{month_total/1000:,.1f}K` ({month_total:,.0f} VNĐ)\n"
             f"- **Tiền mặt:** `{month_cash/1000:,.1f}K`\n"
             f"- **Chuyển khoản:** `{month_transfer/1000:,.1f}K`\n"
-            f"*(Số liệu được đồng bộ trực tiếp từ sổ thu ngân 3 cơ sở Ninh Vân, Phố Dâu, Cửu Yên)*"
+            f"*(Đồng bộ trực tiếp từ sổ thu ngân 3 cơ sở Ninh Vân, Phố Dâu, Cửu Yên)*"
         )
     elif any(k in lower for k in ["nợ", "công nợ", "ai nợ"]):
         debtors_text = "\n".join([f"{i+1}. **{d[0]}** ({d[2]} - SĐT: {d[1] or 'Chưa có'}): nợ `{d[3]/1000:,.1f}K`" for i, d in enumerate(top_debtors)])
@@ -366,14 +551,20 @@ Số tiền nên định dạng ngắn gọn theo đơn vị K (1K = 1.000 VNĐ)
             appt_list = "\n".join([f"- **{a[0]}** ({a[1] or 'Không SĐT'}): {a[2] or 'Trong ngày'} - {a[3]} (CS {a[4]})" for a in appts_today])
             reply = f"📅 **Hôm nay ({today_str}) có {len(appts_today)} bệnh nhân hẹn:**\n{appt_list}"
         else:
-            reply = f"📅 **Hôm nay ({today_str}) không có bệnh nhân nào có lịch hẹn.** Bạn có thể xem lịch hẹn của cả tháng trong tab *Lịch hẹn & Tái khám*."
+            reply = f"📅 **Hôm nay ({today_str}) không có bệnh nhân nào có lịch hẹn.** Bạn có thể xem lịch hẹn cả tháng trong tab *Lịch hẹn & Tái khám*."
     else:
+        role_note = "Bác sĩ Thắng" if is_admin else "Nhân viên"
+        rev_bullet = f"- Doanh thu tháng này đạt: `{month_total/1000:,.1f}K`.\n" if is_admin else ""
         reply = (
-            f"🦷 **Nha Khoa NiBi xin chào Bác sĩ!**\n"
+            f"🦷 **Nha Khoa NiBi xin chào {role_note}!**\n"
             f"- Hệ thống đang theo dõi **{total_patients}** bệnh nhân trên 3 cơ sở.\n"
-            f"- Doanh thu tháng này đạt: `{month_total/1000:,.1f}K`.\n"
+            f"{rev_bullet}"
             f"- Tổng công nợ hiện tại: `{debt_total/1000:,.1f}K` ({debt_patients_count} người).\n\n"
-            f"💡 *Bạn có thể hỏi tôi: 'Doanh thu tháng này', 'Ai đang nợ nhiều nhất?', 'Lịch hẹn hôm nay', hoặc gõ 1 câu tự nhiên để tự động tạo hồ sơ bệnh nhân mới!*"
+            f"💡 *Bạn có thể hỏi tôi:*\n"
+            f"- 👤 *'Thông tin bệnh nhân [Tên/SĐT]'* để xem hồ sơ và lịch sử điều trị\n"
+            f"- 📅 *'Lịch hẹn hôm nay'* để xem danh sách bệnh nhân hẹn\n"
+            f"- 💰 *'Ai đang nợ nhiều nhất?'* để xem công nợ"
+            + (f"\n- 📊 *'Doanh thu tháng này'* để xem báo cáo thu chi" if is_admin else "")
         )
 
     return {"reply": reply, "source": "local_nlp"}

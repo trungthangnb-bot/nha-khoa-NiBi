@@ -1210,7 +1210,8 @@ def api_ai_parse_intake(data: AiIntakeIn, user=Depends(current_user)):
 @app.post("/api/ai/chat")
 def api_ai_chat(data: AiChatIn, user=Depends(current_user)):
     """Trợ lý AI hỏi đáp dữ liệu phòng khám thời gian thực."""
-    result = answer_clinic_query(data.message)
+    is_admin = (user.get("role") == "admin")
+    result = answer_clinic_query(data.message, is_admin=is_admin)
     return {"ok": True, **result}
 
 

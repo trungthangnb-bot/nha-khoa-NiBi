@@ -349,15 +349,25 @@ class ApiTest(unittest.TestCase):
         self.assertTrue(bool(d["next_date"]))
 
     def test_71_ai_chat_query(self):
-        # Revenue query
-        res1 = self.c.post("/api/ai/chat", json={"message": "Doanh thu tháng này thế nào?"}, headers=self.staff)
-        self.assertEqual(res1.status_code, 200)
-        self.assertIn("Doanh Thu", res1.json()["reply"])
+        # 1. Staff asking for revenue -> BLOCKED (RBAC)
+        res_staff_rev = self.c.post("/api/ai/chat", json={"message": "Doanh thu tháng này thế nào?"}, headers=self.staff)
+        self.assertEqual(res_staff_rev.status_code, 200)
+        self.assertIn("Bảo Mật Tài Chính", res_staff_rev.json()["reply"])
 
-        # Debt query
-        res2 = self.c.post("/api/ai/chat", json={"message": "Cho tôi danh sách ai đang nợ"}, headers=self.staff)
-        self.assertEqual(res2.status_code, 200)
-        self.assertIn("Nợ", res2.json()["reply"])
+        # 2. Admin asking for revenue -> ALLOWED
+        res_admin_rev = self.c.post("/api/ai/chat", json={"message": "Doanh thu tháng này thế nào?"}, headers=self.admin)
+        self.assertEqual(res_admin_rev.status_code, 200)
+        self.assertIn("Doanh Thu", res_admin_rev.json()["reply"])
+
+        # 3. Staff asking for debt -> ALLOWED
+        res_debt = self.c.post("/api/ai/chat", json={"message": "Cho tôi danh sách ai đang nợ"}, headers=self.staff)
+        self.assertEqual(res_debt.status_code, 200)
+        self.assertIn("Nợ", res_debt.json()["reply"])
+
+        # 4. Staff asking for patient info -> ALLOWED
+        res_pat = self.c.post("/api/ai/chat", json={"message": "thông tin bệnh nhân Lan"}, headers=self.staff)
+        self.assertEqual(res_pat.status_code, 200)
+        self.assertTrue(len(res_pat.json()["reply"]) > 20)
 
     def test_72_admin_gemini_api_key_setting(self):
         # Admin gets current settings
