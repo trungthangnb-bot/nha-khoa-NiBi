@@ -124,8 +124,8 @@ async function api(path, options = {}) {
 
 // ==================== INITIALIZATION & AUTH ====================
 document.addEventListener('DOMContentLoaded', async () => {
-    // Prevent ANY Enter key inside forms from submitting accidentally
-    preventEnterKeySubmit();
+    // Enable smart keyboard navigation (Enter, Arrow Up/Down/Left/Right) in intake and dialogs
+    setupFormKeyboardNavigation();
 
     // Setup global branch selector sync
     const bTop = document.getElementById('branch-select-top');
@@ -191,18 +191,208 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
-function preventEnterKeySubmit() {
+// Form 2D Navigation Grids for instant Enter / Arrow navigation
+const FORM_NAV_GRIDS = {
+    'patient-modal': [
+        ['pm-name', 'pm-phone'],
+        ['pm-yob', 'pm-age', 'pm-branch'],
+        ['pm-address'],
+        ['pm-history', 'pm-notes'],
+        ['pm-t-date', 'pm-t-cat', 'pm-t-dentist'],
+        ['pm-t-proc', 'pm-t-tooth'],
+        ['pm-t-cost', 'pm-t-paid', 'pm-t-method'],
+        ['pm-t-next'],
+        ['btn-save-patient']
+    ],
+    'treatment-modal': [
+        ['tm-date', 'tm-branch'],
+        ['tm-category', 'tm-dentist'],
+        ['tm-procedure', 'tm-tooth'],
+        ['tm-cost', 'tm-paid'],
+        ['tm-method', 'tm-next-date'],
+        ['tm-notes'],
+        ['btn-save-treatment']
+    ],
+    'appointment-modal': [
+        ['apptm-patient-search'],
+        ['apptm-kind', 'apptm-branch'],
+        ['apptm-date', 'apptm-time'],
+        ['apptm-reason'],
+        ['btn-save-appointment']
+    ],
+    'collect-modal': [
+        ['col-amount', 'col-method'],
+        ['col-date', 'col-note'],
+        ['btn-save-collect']
+    ]
+};
+
+function setupFormKeyboardNavigation() {
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            const target = e.target;
-            // Ignore Enter on textarea or buttons
-            if (target && target.tagName !== 'TEXTAREA' && target.tagName !== 'BUTTON') {
+        const target = e.target;
+        if (!target) return;
+
+        // Check if inside one of our modal forms
+        let activeModalId = null;
+        let grid = null;
+        for (const [modalId, mGrid] of Object.entries(FORM_NAV_GRIDS)) {
+            const modalEl = document.getElementById(modalId);
+            if (modalEl && !modalEl.classList.contains('hidden') && modalEl.contains(target)) {
+                activeModalId = modalId;
+                grid = mGrid;
+                break;
+            }
+        }
+
+        // Standard Enter prevention for ordinary non-modal forms
+        if (!grid) {
+            if (e.key === 'Enter' && target.tagName !== 'TEXTAREA' && target.tagName !== 'BUTTON') {
                 const form = target.closest('form');
                 if (form && form.id !== 'login-form') {
                     e.preventDefault();
                     return false;
                 }
             }
+            return;
+        }
+
+        const key = e.key;
+        if (!['Enter', 'ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft'].includes(key)) {
+            return;
+        }
+
+        // If target is a button and user hits Enter, let button perform click naturally
+        if (target.tagName === 'BUTTON' && key === 'Enter') {
+            return;
+        }
+
+        // Find position in grid
+        const targetId = target.id;
+        let curRow = -1;
+        let curCol = -1;
+        for (let r = 0; r < grid.length; r++) {
+            const c = grid[r].indexOf(targetId);
+            if (c !== -1) {
+                curRow = r;
+                curCol = c;
+                break;
+            }
+        }
+
+        if (curRow === -1) return;
+
+        // Helper: check if element is visible and interactable
+        const isInteractable = (elId) => {
+            const el = document.getElementById(elId);
+            if (!el || el.disabled) return false;
+            if (el.offsetParent === null) return false;
+            if (el.closest('.hidden')) return false;
+            return true;
+        };
+
+        const focusAndSelect = (elId) => {
+            const el = document.getElementById(elId);
+            if (!el) return false;
+            el.focus();
+            if (typeof el.select === 'function' && el.tagName === 'INPUT' && !['date', 'checkbox', 'radio'].includes(el.type)) {
+                el.select();
+            }
+            return true;
+        };
+
+        // Flatten visible fields in order
+        const flatVisible = [];
+        for (let r = 0; r < grid.length; r++) {
+            for (let c = 0; c < grid[r].length; c++) {
+                const id = grid[r][c];
+                if (isInteractable(id)) {
+                    flatVisible.push({ id, r, c });
+                }
+            }
+        }
+
+        const flatIdx = flatVisible.findIndex(item => item.id === targetId);
+
+        // 1. ENTER: jump to next visible field
+        if (key === 'Enter') {
+            e.preventDefault();
+            if (flatIdx !== -1 && flatIdx < flatVisible.length - 1) {
+                focusAndSelect(flatVisible[flatIdx + 1].id);
+            } else if (flatIdx === flatVisible.length - 1) {
+                const btn = document.getElementById(flatVisible[flatIdx].id);
+                if (btn) btn.click();
+            }
+            return;
+        }
+
+        // 2. ARROW DOWN: jump to row below
+        if (key === 'ArrowDown') {
+            // For selects: let user cycle options unless Shift/Alt, or navigate down if simple
+            if (target.tagName === 'SELECT') {
+                // If it's a closed select, Enter or Down can be used, let standard select change work
+                return;
+            }
+            e.preventDefault();
+            for (let r = curRow + 1; r < grid.length; r++) {
+                const rowItems = grid[r].filter(id => isInteractable(id));
+                if (rowItems.length > 0) {
+                    const targetItem = rowItems[Math.min(curCol, rowItems.length - 1)];
+                    focusAndSelect(targetItem);
+                    return;
+                }
+            }
+            return;
+        }
+
+        // 3. ARROW UP: jump to row above
+        if (key === 'ArrowUp') {
+            if (target.tagName === 'SELECT') {
+                return;
+            }
+            e.preventDefault();
+            for (let r = curRow - 1; r >= 0; r--) {
+                const rowItems = grid[r].filter(id => isInteractable(id));
+                if (rowItems.length > 0) {
+                    const targetItem = rowItems[Math.min(curCol, rowItems.length - 1)];
+                    focusAndSelect(targetItem);
+                    return;
+                }
+            }
+            return;
+        }
+
+        // 4. ARROW RIGHT: move to next column or next field
+        if (key === 'ArrowRight') {
+            // If typing in input, only navigate if cursor is at the very end or text is all selected
+            if (target.tagName === 'INPUT' && (target.type === 'text' || target.type === 'tel')) {
+                const isAtEnd = target.selectionStart === target.value.length;
+                const isAllSelected = target.selectionStart === 0 && target.selectionEnd === target.value.length;
+                if (!isAtEnd && !isAllSelected) {
+                    return; // let cursor move inside text
+                }
+            }
+            e.preventDefault();
+            if (flatIdx !== -1 && flatIdx < flatVisible.length - 1) {
+                focusAndSelect(flatVisible[flatIdx + 1].id);
+            }
+            return;
+        }
+
+        // 5. ARROW LEFT: move to previous column or previous field
+        if (key === 'ArrowLeft') {
+            // If typing in input, only navigate if cursor is at the very beginning or text is all selected
+            if (target.tagName === 'INPUT' && (target.type === 'text' || target.type === 'tel')) {
+                const isAtStart = target.selectionStart === 0 && target.selectionEnd === 0;
+                const isAllSelected = target.selectionStart === 0 && target.selectionEnd === target.value.length;
+                if (!isAtStart && !isAllSelected) {
+                    return; // let cursor move inside text
+                }
+            }
+            e.preventDefault();
+            if (flatIdx > 0) {
+                focusAndSelect(flatVisible[flatIdx - 1].id);
+            }
+            return;
         }
     });
 }
@@ -737,7 +927,13 @@ function openPatientModal(editingPatient = null) {
 
     renderAddressSuggestions();
     modal.classList.remove('hidden');
-    document.getElementById('pm-name').focus();
+    setTimeout(() => {
+        const nameInput = document.getElementById('pm-name');
+        if (nameInput) {
+            nameInput.focus();
+            nameInput.select();
+        }
+    }, 50);
 }
 
 function closePatientModal() {

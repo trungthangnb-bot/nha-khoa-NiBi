@@ -992,13 +992,13 @@
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5">
                     <div>
                         <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Năm sinh</label>
-                        <input type="number" id="pm-yob" oninput="syncAgeFromYob()" min="1920" max="2026"
+                        <input type="text" inputmode="numeric" id="pm-yob" oninput="syncAgeFromYob()" maxlength="4"
                                class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none transition text-sm"
                                placeholder="1995">
                     </div>
                     <div>
                         <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Tuổi</label>
-                        <input type="number" id="pm-age" oninput="syncYobFromAge()" min="0" max="110"
+                        <input type="text" inputmode="numeric" id="pm-age" oninput="syncYobFromAge()" maxlength="3"
                                class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none transition text-sm"
                                placeholder="31">
                     </div>
@@ -1140,8 +1140,9 @@
                     </div>
                 </div>
 
-                <div class="text-[11px] text-slate-400 italic">
-                    💡 Hệ thống chỉ lưu khi ấn nút bên dưới, không tự động lưu khi ấn Enter.
+                <div class="text-[11px] text-teal-800 font-semibold bg-teal-50/90 border border-teal-200 rounded-xl p-2.5 flex items-center gap-2">
+                    <i class="fa-solid fa-keyboard text-teal-600 text-sm"></i>
+                    <span><b>Mẹo phím tắt nhanh:</b> Ấn <b>Enter</b> hoặc <b>↓ / →</b> để sang ô tiếp theo, <b>↑ / ←</b> để quay lại ô trước. Ấn <b>Enter</b> ở nút Lưu để hoàn tất.</span>
                 </div>
             </form>
 
