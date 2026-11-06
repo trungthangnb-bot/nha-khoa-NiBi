@@ -453,6 +453,38 @@ class ApiTest(unittest.TestCase):
         settings["branches"] = ["Ninh Vân"]
         self.c.post("/api/admin/settings", json=settings, headers=self.admin)
 
+    def test_75_today_visits_reconciliation(self):
+        # 1. Create a treatment for today
+        p = self.new_patient("Bệnh Nhân Khám Hôm Nay", phone="0988776655")
+        t_res = self.c.post(f"/api/patients/{p['id']}/treatments", headers=self.staff, json={
+            "visit_date": iso(TODAY), "branch": "Ninh Vân", "category": "Tổng quát",
+            "procedure": "Lấy cao răng + đánh bóng", "cost": 300000, "paid": 300000, "notes": "Ê buốt nhẹ"
+        })
+        self.assertEqual(t_res.status_code, 200)
+
+        # 2. Check Dashboard visits_today reflects this treatment
+        dash = self.c.get("/api/dashboard", headers=self.admin).json()
+        self.assertGreaterEqual(dash["visits_today"], 1)
+
+        # 3. Check today-visits endpoint as admin (full reconciliation data)
+        tv = self.c.get(f"/api/admin/today-visits?date={iso(TODAY)}", headers=self.admin).json()
+        self.assertEqual(tv["date"], iso(TODAY))
+        self.assertTrue(tv["is_admin"])
+        self.assertGreaterEqual(tv["summary"]["total_visits"], 1)
+        self.assertGreaterEqual(tv["summary"]["total_billed"], 300000)
+        self.assertGreaterEqual(tv["summary"]["total_paid"], 300000)
+
+        item = next(it for it in tv["items"] if it["patient_id"] == p["id"])
+        self.assertEqual(item["procedure"], "Lấy cao răng + đánh bóng")
+        self.assertEqual(item["cost"], 300000)
+        self.assertEqual(item["paid"], 300000)
+
+        # 4. Check today-visits endpoint as staff (financial numbers masked for security)
+        tv_staff = self.c.get(f"/api/admin/today-visits?date={iso(TODAY)}", headers=self.staff).json()
+        self.assertFalse(tv_staff["is_admin"])
+        self.assertEqual(tv_staff["summary"]["total_billed"], 0)
+        self.assertEqual(tv_staff["summary"]["total_paid"], 0)
+
     def test_99_logout_invalidates_token(self):
         h = self.login("letan", "abc123")
         self.assertEqual(self.c.post("/api/auth/logout", headers=h).status_code, 200)

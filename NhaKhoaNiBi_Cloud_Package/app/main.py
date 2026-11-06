@@ -989,6 +989,13 @@ def dashboard(branch: str = "", user=Depends(admin_only)):
         patients = conn.execute("SELECT COUNT(*) FROM patients" + (" WHERE branch=?" if branch else ""),
                                 [branch] if branch else []).fetchone()[0]
         visits_today = conn.execute(f"SELECT COUNT(*) FROM treatments t WHERE t.visit_date=? {bw}", [iso] + bp).fetchone()[0]
+        p_bw, p_bp = ("AND branch=?", [branch]) if branch else ("", [])
+        new_p_today = conn.execute(
+            f"SELECT COUNT(*) FROM patients WHERE substr(created_at,1,10)=? "
+            f"AND NOT EXISTS (SELECT 1 FROM treatments WHERE patient_id=patients.id AND visit_date=?) {p_bw}",
+            [iso, iso] + p_bp
+        ).fetchone()[0]
+        visits_today += new_p_today
         visits_month = conn.execute(f"SELECT COUNT(*) FROM treatments t WHERE substr(t.visit_date,1,7)=? {bw}",
                                     [ym] + bp).fetchone()[0]
         groups = debt_groups(conn, branch)
@@ -1025,6 +1032,94 @@ def dashboard(branch: str = "", user=Depends(admin_only)):
                            for k in keys],
                 "categories": cat, "branches": by_branch}
     return out
+
+
+@app.get("/api/admin/today-visits")
+def today_visits(date: Optional[str] = None, branch: str = "", user=Depends(current_user)):
+    """Trả về danh sách chi tiết bệnh nhân đến khám trong ngày cho Admin đối soát cuối buổi."""
+    target_date = vdate(date, "Ngày xem") if date else dt.date.today().isoformat()
+    bw, bp = ("AND t.branch=?", [branch]) if branch else ("", [])
+    p_bw, p_bp = ("AND p.branch=?", [branch]) if branch else ("", [])
+    is_adm = (user["role"] == "admin")
+
+    with db() as conn:
+        # 1. Các đợt điều trị / thủ thuật thực hiện trong ngày
+        treatments_sql = f"""
+            SELECT 
+                t.id, t.patient_id, t.branch, t.category, t.dentist, t.procedure, t.tooth, t.cost, t.notes, t.visit_date,
+                p.code AS patient_code, p.name AS patient_name, p.phone AS patient_phone, p.yob AS patient_yob,
+                p.address AS patient_address,
+                COALESCE((SELECT SUM(amount) FROM payments WHERE treatment_id=t.id), 0) AS paid,
+                COALESCE((SELECT GROUP_CONCAT(DISTINCT method) FROM payments WHERE treatment_id=t.id), 'Tiền mặt') AS method
+            FROM treatments t
+            JOIN patients p ON p.id = t.patient_id
+            WHERE t.visit_date = ? {bw}
+            ORDER BY t.id DESC
+        """
+        t_rows = [dict(r) for r in conn.execute(treatments_sql, [target_date] + bp).fetchall()]
+
+        # 2. Các bệnh nhân mới tiếp đón trong ngày nhưng chưa có thủ thuật
+        patients_sql = f"""
+            SELECT 
+                0 AS id, p.id AS patient_id, p.branch, 'Khám tư vấn' AS category, 'Thắng' AS dentist,
+                'Tiếp đón & tư vấn (chưa thực hiện thủ thuật)' AS procedure, '' AS tooth, 0 AS cost, p.notes,
+                substr(p.created_at, 1, 10) AS visit_date,
+                p.code AS patient_code, p.name AS patient_name, p.phone AS patient_phone, p.yob AS patient_yob,
+                p.address AS patient_address,
+                0 AS paid, 'Tiền mặt' AS method
+            FROM patients p
+            WHERE substr(p.created_at, 1, 10) = ? {p_bw}
+              AND NOT EXISTS (SELECT 1 FROM treatments t WHERE t.patient_id = p.id AND t.visit_date = ?)
+            ORDER BY p.id DESC
+        """
+        p_rows = [dict(r) for r in conn.execute(patients_sql, [target_date] + p_bp + [target_date]).fetchall()]
+
+        all_items = t_rows + p_rows
+
+        total_billed = sum(item["cost"] for item in all_items)
+        total_paid = sum(item["paid"] for item in all_items)
+        total_debt = sum(max(item["cost"] - item["paid"], 0) for item in all_items)
+        unique_patients = len(set(item["patient_id"] for item in all_items))
+
+        # Tiền mặt vs Chuyển khoản trong ngày
+        pay_sql = f"""
+            SELECT 
+                COALESCE(SUM(CASE WHEN pay.method LIKE '%Tiền mặt%' THEN pay.amount ELSE 0 END), 0) AS cash,
+                COALESCE(SUM(CASE WHEN pay.method LIKE '%Chuyển khoản%' THEN pay.amount ELSE 0 END), 0) AS transfer
+            FROM payments pay
+            JOIN treatments t ON t.id = pay.treatment_id
+            WHERE pay.paid_on = ? {bw}
+        """
+        pay_row = conn.execute(pay_sql, [target_date] + bp).fetchone()
+        cash_paid = pay_row[0] if pay_row else 0
+        transfer_paid = pay_row[1] if pay_row else 0
+
+        # Nếu không phải admin, ẩn số liệu tài chính để bảo mật RBAC
+        if not is_adm:
+            for it in all_items:
+                it["cost"] = 0
+                it["paid"] = 0
+            total_billed = 0
+            total_paid = 0
+            cash_paid = 0
+            transfer_paid = 0
+            total_debt = 0
+
+    return {
+        "date": target_date,
+        "branch": branch,
+        "is_admin": is_adm,
+        "items": all_items,
+        "summary": {
+            "total_visits": len(all_items),
+            "unique_patients": unique_patients,
+            "total_billed": total_billed,
+            "total_paid": total_paid,
+            "cash_paid": cash_paid,
+            "transfer_paid": transfer_paid,
+            "total_debt": total_debt
+        }
+    }
 
 
 @app.get("/api/admin/reports")

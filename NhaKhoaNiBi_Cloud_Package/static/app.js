@@ -695,6 +695,165 @@ function renderDashboardChart(series) {
     }).join('');
 }
 
+// ==================== TODAY VISITS RECONCILIATION MODAL ====================
+let todayVisitsCache = null;
+
+function openTodayVisitsModal() {
+    const modal = document.getElementById('today-visits-modal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    setTodayVisitsToCurrentDate();
+}
+
+function closeTodayVisitsModal() {
+    const modal = document.getElementById('today-visits-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function setTodayVisitsToCurrentDate() {
+    const dateInput = document.getElementById('tv-filter-date');
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (dateInput) dateInput.value = todayStr;
+    const searchInput = document.getElementById('tv-search');
+    if (searchInput) searchInput.value = '';
+    loadTodayVisits(todayStr);
+}
+
+async function loadTodayVisits(date = null) {
+    const dateInput = document.getElementById('tv-filter-date');
+    const targetDate = date || (dateInput ? dateInput.value : '') || new Date().toISOString().split('T')[0];
+    const container = document.getElementById('today-visits-container');
+    if (container) {
+        container.innerHTML = `
+            <div class="py-12 text-center text-slate-400">
+                <i class="fa-solid fa-spinner fa-spin text-3xl text-teal-600 mb-3"></i>
+                <p class="text-sm font-medium">Đang tải danh sách bệnh nhân khám ngày ${formatDateVN(targetDate)}...</p>
+            </div>
+        `;
+    }
+
+    try {
+        const branchParam = state.branchFilter ? `&branch=${encodeURIComponent(state.branchFilter)}` : '';
+        const res = await api(`/api/admin/today-visits?date=${encodeURIComponent(targetDate)}${branchParam}`);
+        todayVisitsCache = res;
+        renderTodayVisits(res);
+    } catch (e) {
+        if (container) {
+            container.innerHTML = `
+                <div class="py-12 text-center text-rose-500">
+                    <i class="fa-solid fa-triangle-exclamation text-3xl mb-3"></i>
+                    <p class="text-sm font-medium">Không thể tải danh sách: ${escapeHtml(e.message)}</p>
+                </div>
+            `;
+        }
+    }
+}
+
+function renderTodayVisits(data, filteredItems = null) {
+    const container = document.getElementById('today-visits-container');
+    if (!container) return;
+
+    const items = filteredItems !== null ? filteredItems : (data.items || []);
+    const summary = data.summary || {};
+    const isAdmin = data.is_admin || (state.user && state.user.role === 'admin');
+
+    // Update KPIs
+    document.getElementById('tv-kpi-count').textContent = summary.total_visits || 0;
+    document.getElementById('tv-kpi-patients-label').textContent = `(${summary.unique_patients || 0} bệnh nhân)`;
+    document.getElementById('tv-kpi-billed').textContent = formatMoneyK(summary.total_billed || 0);
+    document.getElementById('tv-kpi-paid').textContent = formatMoneyK(summary.total_paid || 0);
+    document.getElementById('tv-kpi-breakdown').textContent = `TM: ${formatMoneyK(summary.cash_paid || 0)} • CK: ${formatMoneyK(summary.transfer_paid || 0)}`;
+    document.getElementById('tv-kpi-debt').textContent = formatMoneyK(summary.total_debt || 0);
+    document.getElementById('tv-footer-summary').textContent = `Tổng cộng: ${items.length} lượt tiếp đón • Ngày ${formatDateVN(data.date)}`;
+
+    if (!items.length) {
+        container.innerHTML = `
+            <div class="py-16 text-center text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200">
+                <div class="w-16 h-16 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-2xl mx-auto mb-3">
+                    <i class="fa-solid fa-calendar-xmark"></i>
+                </div>
+                <h4 class="font-bold text-slate-700 text-sm">Chưa có lượt tiếp đón nào</h4>
+                <p class="text-xs text-slate-400 mt-1 max-w-sm mx-auto">Không có bệnh nhân nào ghi nhận khám hoặc thực hiện thủ thuật trong ngày ${formatDateVN(data.date)}.</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = items.map((it, idx) => {
+        const debt = Math.max(it.cost - it.paid, 0);
+        const debtHtml = debt > 0
+            ? `<span class="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 font-extrabold text-xs">Còn nợ: ${formatMoneyK(debt)}</span>`
+            : `<span class="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-bold text-xs"><i class="fa-solid fa-check text-[10px] mr-1"></i>Đã đủ</span>`;
+
+        const toothBadge = it.tooth ? `<span class="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-bold text-[10px] border border-amber-200">${escapeHtml(it.tooth)}</span>` : '';
+        const yobStr = it.patient_yob ? `SN ${it.patient_yob}` : '';
+        const phoneStr = it.patient_phone || 'Không SĐT';
+        const addrStr = it.patient_address ? ` • ${escapeHtml(it.patient_address)}` : '';
+
+        const financialHtml = isAdmin ? `
+            <div class="text-right flex-shrink-0">
+                <div class="font-black text-slate-800 text-sm">${formatMoneyK(it.cost)}</div>
+                <div class="text-[11px] text-emerald-600 font-bold mt-0.5">Thu: ${formatMoneyK(it.paid)} (${escapeHtml(it.method || 'TM')})</div>
+                <div class="mt-1">${debtHtml}</div>
+            </div>
+        ` : '';
+
+        return `
+            <div class="bg-white p-4 rounded-xl border border-slate-200 hover:border-emerald-300 hover:shadow-sm transition flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div class="flex items-start gap-3 min-w-0">
+                    <div class="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center font-black text-xs flex-shrink-0 border border-slate-200">
+                        ${idx + 1}
+                    </div>
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="font-extrabold text-slate-900 text-sm hover:text-teal-600 cursor-pointer" onclick="closeTodayVisitsModal(); openPatientDetail(${it.patient_id});">
+                                ${escapeHtml(it.patient_name)}
+                            </span>
+                            <span class="font-mono text-xs text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded font-bold">${escapeHtml(it.patient_code)}</span>
+                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">${escapeHtml(it.branch)}</span>
+                        </div>
+                        <div class="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                            <span>📞 ${escapeHtml(phoneStr)}</span>
+                            ${yobStr ? `<span>• ${escapeHtml(yobStr)}</span>` : ''}
+                            <span>${addrStr}</span>
+                        </div>
+                        <div class="mt-2 flex items-center gap-2 flex-wrap">
+                            <span class="px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 text-xs font-bold border border-teal-100">
+                                ${escapeHtml(it.procedure)}
+                            </span>
+                            ${toothBadge}
+                            <span class="text-[11px] text-slate-500 font-medium">BS. ${escapeHtml(it.dentist || 'Thắng')}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between md:justify-end gap-3 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
+                    ${financialHtml}
+                    <button type="button" onclick="closeTodayVisitsModal(); openPatientDetail(${it.patient_id});"
+                            class="p-2 md:px-3 md:py-1.5 bg-slate-50 hover:bg-teal-50 text-slate-600 hover:text-teal-700 font-bold rounded-lg border border-slate-200 text-xs transition flex items-center gap-1.5 flex-shrink-0" title="Xem hồ sơ bệnh án">
+                        <i class="fa-regular fa-eye"></i>
+                        <span class="hidden md:inline">Hồ sơ</span>
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function filterTodayVisitsList(query) {
+    if (!todayVisitsCache || !todayVisitsCache.items) return;
+    const q = (query || '').trim().toLowerCase();
+    if (!q) {
+        renderTodayVisits(todayVisitsCache);
+        return;
+    }
+    const filtered = todayVisitsCache.items.filter(it => {
+        const text = `${it.patient_name} ${it.patient_code} ${it.patient_phone} ${it.procedure} ${it.tooth} ${it.dentist} ${it.notes}`.toLowerCase();
+        return text.includes(q);
+    });
+    renderTodayVisits(todayVisitsCache, filtered);
+}
+
 // ==================== PATIENTS TAB ====================
 function debounceSearchPatients() {
     clearTimeout(state.searchDebounce);
@@ -1046,6 +1205,9 @@ async function submitPatientForm() {
                 await openPatientDetail(pid);
             }
             await loadPatients(0);
+            if (state.user && state.user.role === 'admin') {
+                loadDashboard().catch(console.error);
+            }
         } catch (e) {
             showToast(e.message, 'error');
         } finally {
@@ -1252,6 +1414,9 @@ function deleteCurrentPatient() {
             showToast(`Đã xóa hoàn toàn hồ sơ ${p.name}`, 'success');
             closePatientDetail();
             await loadPatients(0);
+            if (state.user && state.user.role === 'admin') {
+                loadDashboard().catch(console.error);
+            }
         } catch (e) {
             showToast(e.message, 'error');
         }
@@ -1357,6 +1522,9 @@ async function submitTreatmentForm() {
                 showToast('Đã sửa đợt điều trị thành công', 'success');
                 closeTreatmentModal();
                 await openPatientDetail(pid);
+                if (state.user && state.user.role === 'admin') {
+                    loadDashboard().catch(console.error);
+                }
             } catch (e) {
                 showToast(e.message, 'error');
             }
@@ -1387,6 +1555,9 @@ async function submitTreatmentForm() {
             showToast('Đã thêm đợt điều trị mới', 'success');
             closeTreatmentModal();
             await openPatientDetail(pid);
+            if (state.user && state.user.role === 'admin') {
+                loadDashboard().catch(console.error);
+            }
         } catch (e) {
             showToast(e.message, 'error');
         }
@@ -1404,6 +1575,9 @@ function deleteTreatmentRecord(tid) {
             if (state.currentPatient) {
                 await openPatientDetail(state.currentPatient.patient.id);
             }
+            if (state.user && state.user.role === 'admin') {
+                loadDashboard().catch(console.error);
+            }
         } catch (e) {
             showToast(e.message, 'error');
         }
@@ -1420,6 +1594,9 @@ function deletePaymentRecord(paymentId) {
             showToast('Đã xóa khoản thu', 'success');
             if (state.currentPatient) {
                 await openPatientDetail(state.currentPatient.patient.id);
+            }
+            if (state.user && state.user.role === 'admin') {
+                loadDashboard().catch(console.error);
             }
         } catch (e) {
             showToast(e.message, 'error');

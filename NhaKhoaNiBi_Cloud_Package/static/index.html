@@ -389,13 +389,16 @@
                     </div>
 
                     <!-- Visits Today -->
-                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between cursor-pointer hover:border-emerald-500 hover:shadow-md transition group" onclick="openTodayVisitsModal()" title="Bấm để xem chi tiết danh sách bệnh nhân khám hôm nay">
                         <div>
-                            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Khám hôm nay</p>
-                            <h3 id="stat-visits-today" class="text-2xl md:text-3xl font-extrabold text-slate-800 mt-1">--</h3>
-                            <p class="text-[11px] text-emerald-600 font-medium mt-1">Lượt tiếp đón</p>
+                            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider group-hover:text-emerald-700 transition">Khám hôm nay</p>
+                            <h3 id="stat-visits-today" class="text-2xl md:text-3xl font-extrabold text-slate-800 mt-1 group-hover:text-emerald-600 transition">--</h3>
+                            <p class="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1">
+                                <span>Lượt tiếp đón</span>
+                                <i class="fa-solid fa-arrow-up-right-from-square text-[9px] opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 transition"></i>
+                            </p>
                         </div>
-                        <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
+                        <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl group-hover:bg-emerald-600 group-hover:text-white transition shadow-sm">
                             <i class="fa-solid fa-notes-medical"></i>
                         </div>
                     </div>
@@ -1776,7 +1779,98 @@
         </div>
     </div>
 
-    <!-- 12. FLOATING AI ASSISTANT CHATBOT & TOGGLE BUTTON -->
+    <!-- 12. TODAY VISITS MODAL / SỔ KHÁM HÔM NAY (ĐỐI SOÁT CUỐI BUỔI CHO ADMIN) -->
+    <div id="today-visits-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-3 md:p-4">
+        <div class="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[92vh]">
+            <!-- Modal Header -->
+            <div class="bg-gradient-to-r from-emerald-800 via-teal-800 to-slate-900 px-5 py-4 text-white flex items-center justify-between flex-shrink-0 border-b border-emerald-500/20 shadow-sm">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 flex items-center justify-center text-lg shadow-inner">
+                        <i class="fa-solid fa-notes-medical"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 class="font-extrabold text-base text-white">Sổ Quản Lý Bệnh Nhân Khám Trong Ngày</h3>
+                            <span class="px-2 py-0.5 bg-emerald-500 text-slate-950 font-extrabold text-[10px] rounded-full uppercase">Đối Soát Cuối Buổi</span>
+                        </div>
+                        <p class="text-xs text-emerald-100/80 mt-0.5">Danh sách toàn bộ bệnh nhân đến khám, thủ thuật thực hiện và doanh thu thực thu trong ngày</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeTodayVisitsModal()" class="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Controls bar (Filter date, search, reload) -->
+            <div class="bg-slate-50 border-b border-slate-200 px-5 py-3 flex flex-wrap items-center justify-between gap-3 flex-shrink-0 text-xs">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-bold text-slate-700 flex items-center gap-1.5">
+                        <i class="fa-regular fa-calendar text-teal-600"></i>
+                        <span>Ngày khám:</span>
+                    </span>
+                    <input type="date" id="tv-filter-date" onchange="loadTodayVisits(this.value)"
+                           class="px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-teal-500 shadow-sm cursor-pointer">
+                    <button type="button" onclick="setTodayVisitsToCurrentDate()"
+                            class="px-2.5 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-700 font-bold border border-teal-200 rounded-xl transition">
+                        Hôm nay
+                    </button>
+                    <button type="button" onclick="loadTodayVisits()" class="p-1.5 text-slate-500 hover:text-teal-600 rounded-lg hover:bg-slate-200" title="Tải lại">
+                        <i class="fa-solid fa-rotate-right"></i>
+                    </button>
+                </div>
+                <div class="flex items-center gap-2 flex-1 max-w-xs">
+                    <div class="relative w-full">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+                        <input type="text" id="tv-search" oninput="filterTodayVisitsList(this.value)"
+                               placeholder="Tìm tên, SĐT, thủ thuật..."
+                               class="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-teal-500">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary KPI Cards -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 bg-slate-100/70 border-b border-slate-200 flex-shrink-0">
+                <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Lượt tiếp đón</p>
+                    <div class="flex items-baseline gap-1.5 mt-1">
+                        <h4 id="tv-kpi-count" class="text-xl font-black text-slate-800">0</h4>
+                        <span id="tv-kpi-patients-label" class="text-[11px] text-slate-400 font-medium">(0 người)</span>
+                    </div>
+                </div>
+                <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm admin-only">
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Tổng chi phí thủ thuật</p>
+                    <h4 id="tv-kpi-billed" class="text-xl font-black text-slate-800 mt-1">0K</h4>
+                </div>
+                <div class="bg-white p-3 rounded-xl border border-emerald-200 bg-emerald-50/30 shadow-sm admin-only">
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Đã thu thực tế</p>
+                    <h4 id="tv-kpi-paid" class="text-xl font-black text-emerald-600 mt-1">0K</h4>
+                    <p id="tv-kpi-breakdown" class="text-[10px] text-slate-500 font-medium mt-0.5">TM: 0K • CK: 0K</p>
+                </div>
+                <div class="bg-white p-3 rounded-xl border border-rose-200 bg-rose-50/30 shadow-sm admin-only">
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-rose-600">Còn nợ phát sinh</p>
+                    <h4 id="tv-kpi-debt" class="text-xl font-black text-rose-600 mt-1">0K</h4>
+                </div>
+            </div>
+
+            <!-- Visits List Container -->
+            <div id="today-visits-container" class="p-4 md:p-5 overflow-y-auto custom-scrollbar space-y-3 flex-1 bg-slate-50">
+                <!-- Dynamically populated -->
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="bg-white border-t border-slate-200 px-5 py-3 flex items-center justify-between flex-shrink-0">
+                <span id="tv-footer-summary" class="text-xs text-slate-500 font-medium">Đang tải dữ liệu...</span>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="closeTodayVisitsModal()"
+                            class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition">
+                        Đóng
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 13. FLOATING AI ASSISTANT CHATBOT & TOGGLE BUTTON -->
     <div id="ai-chat-drawer" class="hidden fixed bottom-20 md:bottom-24 right-4 md:right-6 z-40 w-[calc(100vw-2rem)] sm:w-96 max-h-[82vh] h-[520px] bg-white rounded-2xl shadow-2xl border border-indigo-100 flex flex-col overflow-hidden transition-all duration-300 transform scale-95 origin-bottom-right">
         <!-- Header -->
         <div class="bg-gradient-to-r from-indigo-700 via-indigo-800 to-teal-700 px-4 py-3 text-white flex items-center justify-between flex-shrink-0 shadow-md">
