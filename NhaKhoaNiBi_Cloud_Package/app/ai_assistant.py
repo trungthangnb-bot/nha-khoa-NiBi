@@ -272,73 +272,103 @@ Trả về định dạng JSON thuần túy với các trường:
     # Fallback rule-based
     return parse_intake_fallback(text)
 
+STOPWORDS = {
+    'tra', 'cuu', 'tim', 'xem', 'cho', 'toi', 'hoi', 've', 'thong', 'tin', 'ho', 'so', 'lich', 'su',
+    'benh', 'nhan', 'khach', 'hang', 'anh', 'chi', 'co', 'chu', 'bac', 'em', 'cu', 'moi', 'o', 'dau',
+    'bao', 'nhieu', 'tien', 'no', 'sdt', 'so', 'dien', 'thoai', 'dieu', 'tri', 'nhung', 'gi', 'con',
+    'khong', 'chua', 'co', 'nay', 'do', 'duoc', 'giup', 'voi', 'rang', 'kham',
+    'thu', 'doanh', 'chi', 'phi', 'tong', 'thang', 'nam', 'ngay', 'tuan', 'the', 'nao', 'sao', 'lai',
+    'loi', 'hen', 'lich', 'gio', 'buoi', 'sang', 'chieu', 'toi', 'trua', 'hai', 'ba', 'tu', 'bay'
+}
+
 def lookup_patient_records(conn, query: str):
-    """Tìm kiếm hồ sơ bệnh nhân theo tên, số điện thoại hoặc mã bệnh nhân."""
+    """Tìm kiếm hồ sơ bệnh nhân trong toàn bộ cơ sở dữ liệu theo số điện thoại, mã bệnh nhân hoặc họ tên (toàn bộ 300+ bệnh nhân)."""
     q = query.strip()
+    norm_q = strip_accents(q)
+
+    # Nếu câu hỏi thuần túy về doanh thu/tài chính chung mà không hỏi về bệnh nhân cụ thể, bỏ qua tìm kiếm bệnh nhân
+    revenue_intent = any(k in q.lower() for k in ["doanh thu", "thu nhập", "doanh số", "lợi nhuận", "tiền thu tháng", "tháng này thu"])
+    patient_intent = any(k in norm_q for k in ["benh nhan", "bn", "khach", "ho so", "benh an", "sdt", "anh", "chi", "co", "chu", "bac", "em", "ten"])
+    if revenue_intent and not patient_intent:
+        return []
+
+    # Tải toàn bộ danh sách bệnh nhân từ CSDL (tốc độ cực nhanh < 1ms với SQLite)
+    all_patients = conn.execute(
+        "SELECT id, code, name, phone, phone_note, yob, address, branch, notes, search_text FROM patients"
+    ).fetchall()
+    if not all_patients:
+        return []
+
     # 1. Phone number match
-    phone_m = re.search(r'(0[3|5|7|8|9]\d{7,8})', q)
+    phone_m = re.search(r'(0\d{8,10})', q)
     if phone_m:
-        return conn.execute(
-            """SELECT id, code, name, phone, phone_note, yob, address, branch, notes 
-               FROM patients 
-               WHERE phone LIKE ? 
-               ORDER BY id DESC LIMIT 5""",
-            (f"%{phone_m.group(1)}%",)
-        ).fetchall()
+        p_matches = [p for p in all_patients if p[3] and phone_m.group(1) in p[3]]
+        if p_matches:
+            return p_matches[:5]
 
-    # 2. Patient code match
-    code_m = re.search(r'(BN-\d+)', q, re.IGNORECASE)
+    # 2. Patient code match (e.g. BN00184, BN-00184, BN184)
+    code_m = re.search(r'bn[-\s]?0*(\d+)', norm_q)
     if code_m:
-        return conn.execute(
-            """SELECT id, code, name, phone, phone_note, yob, address, branch, notes 
-               FROM patients 
-               WHERE code LIKE ? 
-               ORDER BY id DESC LIMIT 5""",
-            (f"%{code_m.group(1)}%",)
-        ).fetchall()
+        target_num = int(code_m.group(1))
+        p_matches = [
+            p for p in all_patients 
+            if p[1] and re.search(r'\d+', p[1]) and int(re.search(r'\d+', p[1]).group()) == target_num
+        ]
+        if p_matches:
+            return p_matches[:5]
 
-    lower_q = q.lower()
-    patient_triggers = [
-        "bệnh nhân", "bn", "khách", "hồ sơ", "thông tin", "tìm", "tra cứu", 
-        "sđt", "số điện thoại", "điều trị", "anh", "chị", "cô", "chú", "bác", "em"
-    ]
-    is_patient_query = any(t in lower_q for t in patient_triggers)
+    # 3. Intelligent Match against patient names (tìm kiếm xuyên suốt toàn bộ bệnh nhân cũ & mới)
+    matches = []
+    for p in all_patients:
+        p_name = p[2]
+        p_norm = strip_accents(p_name).strip()
+        p_words = p_norm.split()
 
-    cleaned = re.sub(
-        r'(?:thông tin|hồ sơ|lịch sử|tìm|tra cứu|cho tôi|hỏi về|xem|bệnh nhân|bn|khách hàng|khách|anh|chị|cô|chú|bác|em|ở đâu|bao nhiêu|nợ|sđt|số điện thoại|của|\?|:)', 
-        ' ', 
-        lower_q
-    ).strip()
+        # Score 100: Khớp hoàn toàn họ tên đầy đủ trong câu hỏi (ví dụ: 'đỗ đình huy' trong 'tra bệnh nhân cũ đỗ đình huy')
+        if p_norm and p_norm in norm_q and not all(w in STOPWORDS for w in p_words):
+            matches.append((100, len(p_norm), p))
+            continue
 
-    if cleaned and len(cleaned) >= 2:
-        norm = strip_accents(cleaned)
-        # Search by exact name substring or normalized search_text
-        rows = conn.execute(
-            """SELECT id, code, name, phone, phone_note, yob, address, branch, notes 
-               FROM patients 
-               WHERE name LIKE ? OR search_text LIKE ?
-               ORDER BY (CASE WHEN name LIKE ? THEN 0 ELSE 1 END), id DESC
-               LIMIT 5""",
-            (f"%{cleaned}%", f"%{norm}%", f"%{cleaned}%")
-        ).fetchall()
-        if rows:
-            return rows
+        # Score 80: Khớp 2 từ cuối của tên (ví dụ: 'đình huy', 'thị vui', 'băng nhi')
+        if len(p_words) >= 2:
+            w1, w2 = p_words[-2], p_words[-1]
+            if w1 not in STOPWORDS and w2 not in STOPWORDS:
+                last_two = f"{w1} {w2}"
+                if last_two in norm_q:
+                    matches.append((80, len(last_two), p))
+                    continue
 
-        words = [w for w in norm.split() if len(w) >= 2]
-        if words:
-            like_sql = " AND ".join(["search_text LIKE ?" for _ in words])
-            params = [f"%{w}%" for w in words]
-            rows = conn.execute(
-                f"""SELECT id, code, name, phone, phone_note, yob, address, branch, notes 
-                   FROM patients 
-                   WHERE {like_sql} 
-                   ORDER BY id DESC LIMIT 5""",
-                params
-            ).fetchall()
-            if rows:
-                return rows
+        # Score 50: Khớp tên riêng (từ cuối) - chỉ áp dụng khi có ngữ cảnh hỏi bệnh nhân hoặc từ không thuộc từ dừng
+        if len(p_words) >= 1:
+            given = p_words[-1]
+            if given not in STOPWORDS and len(given) >= 2:
+                if re.search(r'\b' + re.escape(given) + r'\b', norm_q):
+                    # Chỉ chấp nhận khớp 1 từ đơn nếu có dấu hiệu tìm người hoặc từ khóa đủ rõ
+                    if patient_intent or len(given) >= 4:
+                        matches.append((50, len(given), p))
+                    continue
 
-    return []
+    if not matches and patient_intent:
+        # Fallback substring search trên chuỗi đã lọc từ dừng
+        cleaned = re.sub(
+            r'(?:thong tin|ho so|lich su|tim|tra cuu|cho toi|hoi ve|xem|benh nhan|bn|khach hang|khach|anh|chi|co|chu|bac|em|cu|moi|o dau|bao nhieu|no|sdt|so dien thoai|cua|\?|:)', 
+            ' ', 
+            norm_q
+        ).strip()
+        if len(cleaned) >= 2:
+            for p in all_patients:
+                p_norm = strip_accents(p[2]).strip()
+                if cleaned in p_norm or (p[9] and cleaned in p[9]):
+                    matches.append((60, len(cleaned), p))
+
+    if not matches:
+        return []
+
+    # Giữ lại nhóm điểm cao nhất để lọc bỏ các kết quả nhiễu
+    highest_score = max(m[0] for m in matches)
+    filtered = [m for m in matches if m[0] == highest_score]
+    filtered.sort(key=lambda x: x[1], reverse=True)
+    return [m[2] for m in filtered[:5]]
 
 def format_single_patient_card(conn, p, today_str: str) -> str:
     """Định dạng thẻ chi tiết bệnh nhân kèm lịch sử điều trị và lịch hẹn."""
@@ -543,11 +573,11 @@ def answer_clinic_query(message: str, api_key: str = "", is_admin: bool = False)
                 p_sample_1 = recent_patients[0][2] if recent_patients else "Nguyễn Văn A"
                 p_sample_2 = recent_patients[1][2] if len(recent_patients) > 1 else p_sample_1
                 patient_context = (
-                    f"📋 **DANH SÁCH BỆNH NHÂN TIẾP ĐÓN GẦN ĐÂY NHẤT ({len(recent_patients)} hồ sơ):**\n"
+                    f"📋 **DANH SÁCH BỆNH NHÂN TIẾP ĐÓN GẦN ĐÂY (Toàn hệ thống có {total_patients} bệnh nhân):**\n"
                     + "\n".join(p_list_lines)
                     + f"\n\n🦷 **CÁC ĐỢT ĐIỀU TRỊ THỰC HIỆN GẦN ĐÂY NHẤT:**\n"
                     + "\n".join(t_list_lines)
-                    + f"\n\n💡 *Bác sĩ có thể hỏi bất kỳ ai để xem toàn bộ hồ sơ chi tiết (Ví dụ: 'hồ sơ của {p_sample_1}', 'lịch sử điều trị của {p_sample_2}').*"
+                    + f"\n\n💡 *Hệ thống lưu trữ toàn bộ dữ liệu của tất cả **{total_patients}** bệnh nhân cũ và mới. Bạn có thể tra cứu bất kỳ ai (Ví dụ: 'hồ sơ của {p_sample_1}', 'bệnh nhân cũ Đỗ Đình Huy', 'lịch sử điều trị của {p_sample_2}').*"
                 )
 
     # 2. Xử lý qua Google Gemini API nếu có key
@@ -555,7 +585,7 @@ def answer_clinic_query(message: str, api_key: str = "", is_admin: bool = False)
     if key:
         db_context_parts = [
             f"DỮ LIỆU THỜI GIAN THỰC NHA KHOA NIBI (Hôm nay: {today_str}):",
-            f"- Tổng số bệnh nhân: {total_patients} người"
+            f"- Toàn hệ thống có: {total_patients} bệnh nhân (cả cũ và mới qua 3 cơ sở Ninh Vân, Phố Dâu, Cửu Yên)"
         ]
         if is_admin:
             db_context_parts.append(
@@ -571,7 +601,7 @@ def answer_clinic_query(message: str, api_key: str = "", is_admin: bool = False)
             f"- Lịch hẹn hôm nay ({len(appts_today)} ca): {appts_summary}"
         ])
         if patient_context:
-            db_context_parts.append(f"\nKẾT QUẢ TRA CỨU HỒ SƠ BỆNH NHÂN TRONG CSDL:\n{patient_context}")
+            db_context_parts.append(f"\nKẾT QUẢ TRA CỨU HỒ SƠ BỆNH NHÂN TRONG CSDL (Toàn bộ {total_patients} bệnh nhân):\n{patient_context}")
 
         db_context = "\n".join(db_context_parts)
         sys_prompt = f"""Bạn là Trợ Lý AI Chuyên Nghiệp của Nha Khoa NiBi (BS. Thắng).
@@ -580,7 +610,8 @@ Dữ liệu thời gian thực từ CSDL:
 Quy tắc:
 1. Trả lời súc tích, chính xác, lịch sự, đúng sự thật.
 2. {'Nếu người dùng hỏi về doanh thu thì trả lời đầy đủ.' if is_admin else 'Người dùng là nhân viên: TUYỆT ĐỐI từ chối cung cấp bất kỳ số liệu doanh thu nào.'}
-3. Khi người dùng hỏi về danh sách bệnh nhân, hồ sơ bệnh án hoặc lịch sử điều trị: Hãy sử dụng toàn bộ thông tin bệnh nhân và các đợt điều trị ở trên để trả lời đầy đủ, chi tiết, kèm tình hình công nợ nếu có.
+3. Hệ thống CSDL có toàn bộ {total_patients} bệnh nhân cũ và mới. Khi người dùng tra cứu thông tin bất kỳ bệnh nhân nào (kể cả bệnh nhân cũ), hãy dựa vào kết quả tra cứu CSDL ở trên để trả lời đầy đủ, chi tiết (họ tên, sđt, quê quán, lịch sử điều trị, tình hình nợ).
+4. Tuyệt đối không nói 'chưa có sẵn trong danh sách 8 hồ sơ' nếu hồ sơ bệnh nhân đó đã được tìm thấy trong kết quả tra cứu CSDL.
 """
         reply = call_gemini_api(message, system_instruction=sys_prompt, api_key=key)
         if reply:

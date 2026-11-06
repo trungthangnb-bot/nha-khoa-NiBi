@@ -384,6 +384,30 @@ class ApiTest(unittest.TestCase):
         res2 = self.c.get("/api/admin/settings", headers=self.admin)
         self.assertEqual(res2.json()["gemini_api_key"], "AIzaSyTestMockKey12345")
 
+    def test_73_ai_search_all_historical_patients(self):
+        # Create an older patient with treatment in isolated test db
+        p_old = self.new_patient(name="Đỗ Đình Huy", phone="0862898462", yob=1988, address="Cửu Yên", branch="Cửu Yên")
+        p_old_id = p_old["id"]
+        self.c.post("/api/treatments", headers=self.staff, json={
+            "patient_id": p_old_id, "procedure": "Làm cầu răng sứ", "tooth": "R24", "cost": 3000000, "dentist": "Thắng"
+        })
+
+        # 1. Search older patient by name with conversational prefix "bệnh nhân cũ"
+        res_old = self.c.post("/api/ai/chat", json={"message": "tra cứu bệnh nhân cũ Đỗ Đình Huy"}, headers=self.staff)
+        self.assertEqual(res_old.status_code, 200)
+        reply = res_old.json()["reply"]
+        self.assertTrue("ĐỖ ĐÌNH HUY" in reply or "Đỗ Đình Huy" in reply or "cầu răng sứ" in reply.lower())
+
+        # 2. Search by given name with prefix "anh"
+        res_huy = self.c.post("/api/ai/chat", json={"message": "hồ sơ của anh Huy"}, headers=self.staff)
+        self.assertEqual(res_huy.status_code, 200)
+        self.assertTrue("huy" in res_huy.json()["reply"].lower())
+
+        # 3. Search by phone number
+        res_phone = self.c.post("/api/ai/chat", json={"message": "tìm số 0862898462"}, headers=self.staff)
+        self.assertEqual(res_phone.status_code, 200)
+        self.assertTrue("0862898462" in res_phone.json()["reply"] or "Đỗ Đình Huy" in res_phone.json()["reply"])
+
     def test_99_logout_invalidates_token(self):
         h = self.login("letan", "abc123")
         self.assertEqual(self.c.post("/api/auth/logout", headers=h).status_code, 200)
