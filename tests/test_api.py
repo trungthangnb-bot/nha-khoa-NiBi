@@ -246,8 +246,11 @@ class ApiTest(unittest.TestCase):
         # Check appointments created for p1
         appts1 = self.c.get(f"/api/appointments?when=all&q=BN%20R%C4%83ng%20Gi%E1%BA%A3", headers=self.staff).json()["items"]
         dates1 = [a["appt_date"] for a in appts1]
+        self.assertEqual(len(dates1), 4)
         self.assertIn("2026-07-15", dates1) # 6 months
         self.assertIn("2027-01-15", dates1) # 1 year
+        self.assertIn("2029-01-15", dates1) # 3 years
+        self.assertIn("2031-01-15", dates1) # 5 years
 
         # 2. Test "Chỉnh nha" recall auto-generation (+1m)
         p2 = self.new_patient("BN Chỉnh Nha", phone="0922000222")

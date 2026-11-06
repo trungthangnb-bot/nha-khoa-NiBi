@@ -1594,7 +1594,7 @@ function updateCategoryRecallHint(cat, targetId) {
     const el = document.getElementById(targetId);
     if (!el) return;
     if (cat === 'Răng giả') {
-        el.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles text-amber-500 mr-1.5"></i><b>Quy tắc chuyên khoa Răng giả:</b> Hệ thống tự động tạo <b>2 lịch hẹn tái khám</b>: lần 1 sau <b>6 tháng</b> và tái khám định kỳ <b>1 năm/lần</b>.';
+        el.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles text-amber-500 mr-1.5"></i><b>Quy tắc chuyên khoa Răng giả:</b> Hệ thống tự động tạo <b>4 lịch hẹn tái khám</b>: sau <b>6 tháng</b>, <b>1 năm</b>, <b>3 năm</b> và <b>5 năm</b>.';
         el.classList.remove('hidden');
     } else if (cat === 'Chỉnh nha') {
         el.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles text-teal-600 mr-1.5"></i><b>Quy tắc chuyên khoa Chỉnh nha:</b> Hệ thống tự động tạo lịch hẹn tái khám <b>1 tháng/lần</b> định kỳ liên tục đến khi kết thúc chỉnh nha.';

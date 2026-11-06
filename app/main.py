@@ -453,14 +453,20 @@ def insert_treatment(conn, user, pid, patient_name, branch_default, t: Treatment
     # Clinical rules for automated recall appointment scheduling
     v_date_obj = dt.date.fromisoformat(visit)
     if category == "Răng giả":
-        # Mặc định hẹn lần đầu sau 6 tháng và sau mỗi năm 1 lần
+        # Mặc định hẹn lần đầu sau 6 tháng, 1 năm, 3 năm và 5 năm
         d_6m = add_calendar_months(v_date_obj, 6).isoformat()
         d_1y = add_calendar_months(v_date_obj, 12).isoformat()
+        d_3y = add_calendar_months(v_date_obj, 36).isoformat()
+        d_5y = add_calendar_months(v_date_obj, 60).isoformat()
         first_appt = nxt if nxt else d_6m
         conn.execute("INSERT INTO appointments(patient_id,kind,appt_date,branch,reason,status) VALUES(?,?,?,?,?,?)",
                      (pid, "tai_kham", first_appt, branch, f"Tái khám định kỳ Răng giả (sau 6 tháng): {procedure}", "Chờ đến"))
         conn.execute("INSERT INTO appointments(patient_id,kind,appt_date,branch,reason,status) VALUES(?,?,?,?,?,?)",
                      (pid, "tai_kham", d_1y, branch, f"Tái khám định kỳ Răng giả (sau 1 năm): {procedure}", "Chờ đến"))
+        conn.execute("INSERT INTO appointments(patient_id,kind,appt_date,branch,reason,status) VALUES(?,?,?,?,?,?)",
+                     (pid, "tai_kham", d_3y, branch, f"Tái khám định kỳ Răng giả (sau 3 năm): {procedure}", "Chờ đến"))
+        conn.execute("INSERT INTO appointments(patient_id,kind,appt_date,branch,reason,status) VALUES(?,?,?,?,?,?)",
+                     (pid, "tai_kham", d_5y, branch, f"Tái khám định kỳ Răng giả (sau 5 năm): {procedure}", "Chờ đến"))
     elif category == "Chỉnh nha":
         # Mặc định hẹn 1 tháng 1 lần tới khi kết thúc hoàn toàn
         d_1m = add_calendar_months(v_date_obj, 1).isoformat()
