@@ -931,18 +931,27 @@ async function loadPatients(offset = 0) {
                         <span class="text-[10px] text-teal-600 font-bold bg-teal-50 px-1.5 py-0.5 rounded">${p.code || 'BN' + String(p.id).padStart(5, '0')}</span>
                     </td>
                     <td class="py-3 px-4">
-                        ${p.phone ? `
-                            <a href="tel:${p.phone}" onclick="event.stopPropagation()" class="inline-flex items-center gap-1 text-teal-600 hover:text-teal-800 font-semibold text-xs">
-                                <i class="fa-solid fa-phone text-[10px]"></i>
-                                <span>${escapeHtml(p.phone)}</span>
-                            </a>
-                        ` : '<span class="text-slate-400 text-xs">--</span>'}
-                    </td>
-                    <td class="py-3 px-4 hidden md:table-cell text-xs text-slate-600">
-                        ${p.yob ? `<b>${p.yob}</b> (${p.age} tuổi)` : '--'}
-                    </td>
-                    <td class="py-3 px-4 hidden lg:table-cell text-xs text-slate-500 max-w-xs truncate">
-                        ${escapeHtml(p.address || '--')}
+                        <div>
+                            ${p.phone ? `
+                                <a href="tel:${p.phone}" onclick="event.stopPropagation()" class="inline-flex items-center gap-1 text-teal-600 hover:text-teal-800 font-bold text-xs">
+                                    <i class="fa-solid fa-phone text-[10px]"></i>
+                                    <span>${escapeHtml(p.phone)}</span>
+                                </a>
+                            ` : '<span class="text-slate-400 text-xs italic">Chưa có SĐT</span>'}
+                        </div>
+                        <div class="text-[10px] text-slate-500 mt-1 flex items-center gap-1.5 flex-wrap">
+                            ${p.yob ? `
+                                <span class="text-[10px] text-slate-700 font-bold bg-slate-100 border border-slate-200/80 px-1.5 py-0.5 rounded">
+                                    SN: ${p.yob}${p.age ? ` (${p.age}t)` : ''}
+                                </span>
+                            ` : ''}
+                            ${p.address ? `
+                                <span class="text-[10px] text-slate-600 font-medium bg-slate-50 border border-slate-200/80 px-1.5 py-0.5 rounded max-w-[200px] truncate" title="${escapeHtml(p.address)}">
+                                    <i class="fa-solid fa-location-dot text-[9px] text-slate-400 mr-0.5"></i>${escapeHtml(p.address)}
+                                </span>
+                            ` : ''}
+                            ${!p.yob && !p.address ? '<span class="text-[10px] text-slate-400 italic">--</span>' : ''}
+                        </div>
                     </td>
                     <td class="py-3 px-4 text-xs font-medium">
                         <span class="px-2 py-0.5 rounded-full text-[11px] bg-slate-100 text-slate-700 font-semibold">${escapeHtml(p.branch)}</span>
