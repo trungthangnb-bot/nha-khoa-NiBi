@@ -1437,26 +1437,31 @@ def supply_matches(query: str, item: dict) -> bool:
     if not query or not query.strip():
         return True
     q = query.strip()
-    raw_fields = [
-        item.get("name") or "",
-        item.get("code") or "",
-        item.get("supplier") or "",
-    ]
-    full_raw = " ".join(raw_fields).lower()
-    full_norm = " ".join(strip_accents(f) for f in raw_fields).lower()
+    name_code_raw = f"{item.get('name') or ''} {item.get('code') or ''}"
+    supplier_raw = item.get("supplier") or ""
+
+    name_code_norm = strip_accents(name_code_raw).lower()
+    supplier_norm = strip_accents(supplier_raw).lower()
 
     if has_vietnamese_accent(q):
-        q_lower = q.lower()
-        q_tokens = q_lower.split()
-        return all(tok in full_raw for tok in q_tokens)
+        q_tokens = q.lower().split()
+        for tok in q_tokens:
+            pattern_accent = r'(?<!\w)' + re.escape(tok) + r'(?!\w)'
+            in_name = bool(re.search(pattern_accent, name_code_raw.lower()))
+            if not in_name:
+                if len(tok) >= 4 and tok in supplier_raw.lower():
+                    continue
+                return False
+        return True
     else:
         q_tokens = strip_accents(q).lower().split()
         for tok in q_tokens:
             if len(tok) <= 2:
-                pattern = r"(?<![a-z0-9])" + re.escape(tok)
-                if not re.search(pattern, full_norm):
+                pattern = r'(?<![a-z0-9])' + re.escape(tok) + r'(?![a-z0-9])'
+                if not re.search(pattern, name_code_norm):
                     return False
             else:
+                full_norm = f"{name_code_norm} {supplier_norm}"
                 if tok not in full_norm:
                     return False
         return True
