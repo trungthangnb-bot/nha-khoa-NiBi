@@ -6,6 +6,7 @@ import datetime as dt
 import io
 import json
 import os
+import re
 import sqlite3
 import time
 from typing import Optional
@@ -1426,6 +1427,41 @@ def compute_date_status(exp_str: Optional[str], today: dt.date):
         return None, "none"
 
 
+def has_vietnamese_accent(text: str) -> bool:
+    norm = clean(text)
+    stripped = strip_accents(norm)
+    return norm.lower() != stripped.lower()
+
+
+def supply_matches(query: str, item: dict) -> bool:
+    if not query or not query.strip():
+        return True
+    q = query.strip()
+    raw_fields = [
+        item.get("name") or "",
+        item.get("code") or "",
+        item.get("supplier") or "",
+    ]
+    full_raw = " ".join(raw_fields).lower()
+    full_norm = " ".join(strip_accents(f) for f in raw_fields).lower()
+
+    if has_vietnamese_accent(q):
+        q_lower = q.lower()
+        q_tokens = q_lower.split()
+        return all(tok in full_raw for tok in q_tokens)
+    else:
+        q_tokens = strip_accents(q).lower().split()
+        for tok in q_tokens:
+            if len(tok) <= 2:
+                pattern = r"(?<![a-z0-9])" + re.escape(tok)
+                if not re.search(pattern, full_norm):
+                    return False
+            else:
+                if tok not in full_norm:
+                    return False
+        return True
+
+
 @app.get("/api/supplies")
 def get_supplies(
     q: Optional[str] = None,
@@ -1444,11 +1480,6 @@ def get_supplies(
         if category and category != "Tất cả":
             sql += " AND category = ?"
             params.append(category)
-        if q and q.strip():
-            for tok in strip_accents(q.strip()).split():
-                esc = tok.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-                sql += " AND (name LIKE ? ESCAPE '\\' OR code LIKE ? ESCAPE '\\' OR supplier LIKE ? ESCAPE '\\')"
-                params.extend([f"%{esc}%", f"%{esc}%", f"%{esc}%"])
 
         sql += " ORDER BY CASE WHEN quantity <= min_threshold THEN 0 ELSE 1 END, id DESC"
         rows = conn.execute(sql, params).fetchall()
@@ -1478,6 +1509,9 @@ def get_supplies(
                 exp_green_count += 1
 
             total_value += int(d.get("quantity") or 0) * int(d.get("unit_price") or 0)
+
+            if q and q.strip() and not supply_matches(q, d):
+                continue
 
             if filter_type == "low_stock" and not is_low:
                 continue

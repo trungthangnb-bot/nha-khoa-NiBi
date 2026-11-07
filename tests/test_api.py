@@ -560,6 +560,25 @@ class ApiTest(unittest.TestCase):
         low_items = self.c.get("/api/supplies?filter_type=low_stock", headers=self.staff).json()["items"]
         self.assertTrue(all(it["is_low_stock"] for it in low_items))
 
+        # Accurate search tests (accented and unaccented)
+        # Search "tê": must find Thuốc tê, NOT Composite
+        search_te_accent = self.c.get("/api/supplies?q=t%C3%AA", headers=self.staff).json()["items"]
+        names_te_accent = [it["name"] for it in search_te_accent]
+        self.assertIn("Thuốc tê Pháp Septanest 4%", names_te_accent)
+        self.assertNotIn("Chất trám Composite 3M", names_te_accent)
+
+        # Search "te": must find Thuốc tê, NOT Composite
+        search_te_unaccent = self.c.get("/api/supplies?q=te", headers=self.staff).json()["items"]
+        names_te_unaccent = [it["name"] for it in search_te_unaccent]
+        self.assertIn("Thuốc tê Pháp Septanest 4%", names_te_unaccent)
+        self.assertNotIn("Chất trám Composite 3M", names_te_unaccent)
+
+        # Search "comp": must find Composite
+        search_comp = self.c.get("/api/supplies?q=comp", headers=self.staff).json()["items"]
+        names_comp = [it["name"] for it in search_comp]
+        self.assertIn("Chất trám Composite 3M", names_comp)
+        self.assertNotIn("Thuốc tê Pháp Septanest 4%", names_comp)
+
         # 3. 1-Touch Stock Adjust by Staff without Admin Password
         # Nhập thêm 5 hộp s1: 20 -> 25
         adj_in = self.c.post(f"/api/supplies/{s1['id']}/adjust", json={"delta": 5, "reason": "Nhập thêm lô mới"}, headers=self.staff)
