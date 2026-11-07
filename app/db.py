@@ -1,13 +1,37 @@
-"""SQLite layer for Nha khoa NiBi - BS. Thắng."""
+"""SQLite / Turso Cloud layer for Nha khoa NiBi - BS. Thắng."""
 import contextlib
+import json
 import os
 import sqlite3
+
+try:
+    import libsql_client
+except ImportError:
+    libsql_client = None
 
 from .security import hash_secret
 from .textutil import strip_accents
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.environ.get("NIBI_DB") or os.path.join(BASE_DIR, "data", "nibi.db")
+
+# Load Turso Cloud DB credentials from env or local turso_config.json
+def _get_turso_config():
+    url = os.environ.get("TURSO_DATABASE_URL", "").strip()
+    token = os.environ.get("TURSO_AUTH_TOKEN", "").strip()
+    if not url or not token:
+        cfg_file = os.path.join(BASE_DIR, "turso_config.json")
+        if os.path.exists(cfg_file):
+            try:
+                with open(cfg_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    url = url or data.get("TURSO_DATABASE_URL", "").strip()
+                    token = token or data.get("TURSO_AUTH_TOKEN", "").strip()
+            except Exception:
+                pass
+    return url, token
+
+TURSO_URL, TURSO_TOKEN = _get_turso_config()
 
 BRANCHES = ["Ninh Vân"]
 CATEGORIES = ["Tổng quát", "Nhổ răng", "Điều trị tủy", "Răng giả", "Chỉnh nha", "Implant"]
@@ -119,7 +143,99 @@ CREATE INDEX IF NOT EXISTS ix_audit_unread ON audit_logs(is_read, action);
 """
 
 
-def connect() -> sqlite3.Connection:
+class TursoRow(dict):
+    def __init__(self, cols, vals):
+        super().__init__(zip(cols, vals))
+        self._vals = tuple(vals)
+        self._cols = tuple(cols)
+
+    def __getitem__(self, k):
+        if isinstance(k, int):
+            return self._vals[k]
+        return super().__getitem__(k)
+
+    def keys(self):
+        return self._cols
+
+
+class TursoCursor:
+    def __init__(self, result_set):
+        self._res = result_set
+        self._rows = [TursoRow(result_set.columns, row) for row in result_set.rows] if result_set else []
+        self._idx = 0
+        self.lastrowid = getattr(result_set, "last_insert_rowid", None)
+        self.rowcount = getattr(result_set, "rows_affected", 0)
+
+    def fetchone(self):
+        if self._idx < len(self._rows):
+            r = self._rows[self._idx]
+            self._idx += 1
+            return r
+        return None
+
+    def fetchall(self):
+        r = self._rows[self._idx :]
+        self._idx = len(self._rows)
+        return r
+
+    def __iter__(self):
+        return iter(self._rows)
+
+
+class TursoConnection:
+    def __init__(self, client):
+        self._client = client
+
+    def execute(self, sql, params=None):
+        if params is None:
+            res = self._client.execute(sql)
+        else:
+            res = self._client.execute(sql, list(params))
+        return TursoCursor(res)
+
+    def executemany(self, sql, seq_of_params):
+        stmts = [libsql_client.Statement(sql, list(p)) for p in seq_of_params]
+        res_list = self._client.batch(stmts)
+        return TursoCursor(res_list[-1] if res_list else None)
+
+    def executescript(self, script):
+        for s in script.split(";"):
+            s = s.strip()
+            if s:
+                self._client.execute(s)
+
+    def commit(self):
+        pass
+
+    def rollback(self):
+        pass
+
+    def close(self):
+        pass
+
+
+_turso_client = None
+
+
+def get_turso_client():
+    global _turso_client
+    if _turso_client is None:
+        url, token = _get_turso_config()
+        _turso_client = libsql_client.create_client_sync(url, auth_token=token)
+    return _turso_client
+
+
+def is_turso():
+    # Never use Turso during test suite runs (where NIBI_DB is set to a temporary test file)
+    if os.environ.get("NIBI_DB"):
+        return False
+    url, token = _get_turso_config()
+    return bool(url and token and libsql_client)
+
+
+def connect():
+    if is_turso():
+        return TursoConnection(get_turso_client())
     conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
@@ -145,6 +261,24 @@ def patient_search_text(name, phone, phone_note, address, code) -> str:
 
 
 def init_db() -> None:
+    if is_turso():
+        conn = connect()
+        try:
+            conn.executescript(SCHEMA)
+            if not conn.execute("SELECT 1 FROM users LIMIT 1").fetchone():
+                conn.execute(
+                    "INSERT INTO users(username,password_hash,full_name,role) VALUES(?,?,?,'admin')",
+                    ("admin", hash_secret(DEFAULT_ADMIN_PASSWORD), "BS. Thắng (Quản trị)"),
+                )
+            if not conn.execute("SELECT 1 FROM settings WHERE key='edit_pin_hash'").fetchone():
+                conn.execute(
+                    "INSERT INTO settings(key,value) VALUES('edit_pin_hash',?)",
+                    (hash_secret(DEFAULT_EDIT_PIN),),
+                )
+        finally:
+            conn.close()
+        return
+
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = connect()
     try:

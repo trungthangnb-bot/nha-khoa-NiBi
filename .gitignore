@@ -5,3 +5,5 @@ __pycache__/
 .system_generated/
 *.vbs
 *.bat
+turso_config.json
+.env
