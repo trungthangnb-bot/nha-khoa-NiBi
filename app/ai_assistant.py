@@ -657,3 +657,164 @@ Quy tắc:
         )
 
     return {"reply": reply, "source": "local_nlp"}
+
+
+def parse_supply_fallback(text: str) -> dict:
+    """Smart Vietnamese rule-based extractor for dental supplies and medicines."""
+    raw = text.strip()
+    res = {
+        "name": "",
+        "category": "Vật liệu tiêu hao",
+        "unit": "Hộp",
+        "quantity": 1,
+        "min_threshold": 5,
+        "expiry_date": None,
+        "unit_price": 0,
+        "supplier": "",
+        "notes": "",
+    }
+    if not raw:
+        return res
+
+    lower = raw.lower()
+
+    # 1. Category detection
+    if any(k in lower for k in ["tê", "thuốc", "kháng sinh", "paracetamol", "amox", "lidocain", "artin", "mepivastesin", "septanest", "adrenalin", "panadol", "efferalgan"]):
+        res["category"] = "Thuốc & Tê"
+    elif any(k in lower for k in ["composite", "trám", "keo", "bond", "axit", "etching", "fuji", "gutta", "nong", "tủy", "chất hàn"]):
+        res["category"] = "Trám răng & Điều trị"
+    elif any(k in lower for k in ["mắc cài", "dây cung", "thun", "chỉnh nha", "kìm bẻ", "niềng", "bracket"]):
+        res["category"] = "Chỉnh nha"
+    elif any(k in lower for k in ["labo", "răng giả", "khay lấy dấu", "alginate", "thạch cao", "sáp", "sứ", "răng nhựa"]):
+        res["category"] = "Răng giả & Labo"
+    elif any(k in lower for k in ["kìm", "gắp", "thám châm", "gương", "tay khoan", "mũi khoan", "đèn quang", "đèn trùng hợp", "máy"]):
+        res["category"] = "Dụng cụ & Khác"
+    else:
+        res["category"] = "Vật liệu tiêu hao"
+
+    # 2. Unit detection
+    for u in ["Hộp", "Ống", "Tuýp", "Lọ", "Gói", "Chiếc", "Bộ", "Cuộn", "Cái", "Vỉ", "Bình"]:
+        if re.search(r'\b' + re.escape(u.lower()) + r'\b', lower):
+            res["unit"] = u
+            break
+
+    # 3. Quantity detection
+    m_qty2 = re.search(r'(\d+)\s*(?:hộp|ống|tuýp|lọ|gói|chiếc|bộ|cuộn|cái|vỉ|bình)', lower)
+    if m_qty2:
+        try:
+            res["quantity"] = int(m_qty2.group(1))
+        except ValueError:
+            pass
+    else:
+        m_qty = re.search(r'(?:nhập|số lượng|sl|mua|có)?\s*(\d+)', lower)
+        if m_qty:
+            try:
+                q = int(m_qty.group(1))
+                if 0 < q < 10000:
+                    res["quantity"] = q
+            except ValueError:
+                pass
+
+    # 4. Expiry date detection
+    text_for_price = lower
+    m_date = re.search(r'(?:date|hạn|hsd|hết hạn|exp|đến)?\s*(\d{1,2})[/-](\d{1,2})[/-](\d{4})', lower)
+    if m_date:
+        d, m, y = int(m_date.group(1)), int(m_date.group(2)), int(m_date.group(3))
+        res["expiry_date"] = f"{y:04d}-{m:02d}-{d:02d}"
+        text_for_price = text_for_price[:m_date.start()] + " " + text_for_price[m_date.end():]
+    else:
+        m_my = re.search(r'(?:date|hạn|hsd|hết hạn|exp|tháng)\s*(\d{1,2})[/-](\d{4})', lower)
+        if m_my:
+            m, y = int(m_my.group(1)), int(m_my.group(2))
+            res["expiry_date"] = f"{y:04d}-{m:02d}-28"
+            text_for_price = text_for_price[:m_my.start()] + " " + text_for_price[m_my.end():]
+        else:
+            m_yr = re.search(r'(?:date|hạn|hsd|hết hạn|exp|năm)\s*(20\d{2})', lower)
+            if m_yr:
+                res["expiry_date"] = f"{m_yr.group(1)}-12-31"
+                text_for_price = text_for_price[:m_yr.start()] + " " + text_for_price[m_yr.end():]
+
+    # 5. Price detection
+    m_k = re.search(r'(?:giá|đơn giá|giá nhập)?\s*(\d+(?:[.,]\d+)?)\s*(?:k|nghìn|ngàn)\b', text_for_price)
+    if m_k:
+        val = float(m_k.group(1).replace(",", "."))
+        res["unit_price"] = int(val * 1000)
+    else:
+        m_full = re.search(r'(?:giá|đơn giá)?\s*(\d{1,3}(?:\.\d{3})+|\d{5,9})\s*(?:đ|vnd|vnđ)?\b', text_for_price)
+        if m_full:
+            clean_digits = re.sub(r'\D', '', m_full.group(1))
+            if clean_digits:
+                val = int(clean_digits)
+                if val >= 500:
+                    res["unit_price"] = val
+
+    # 6. Supplier detection
+    m_sup = re.search(r'(?:ncc|nhà cung cấp|cty|công ty|mua của|từ)\s+([^,\n.]+)', raw, re.IGNORECASE)
+    if m_sup:
+        res["supplier"] = m_sup.group(1).strip()
+
+    # 7. Name detection
+    clean_name = re.sub(r'^(nhập|mua|thêm|vừa mua|lấy|bổ sung)\s+', '', raw, flags=re.IGNORECASE)
+    clean_name = re.sub(r'\b\d+\s*(hộp|ống|tuýp|lọ|gói|chiếc|bộ|cuộn|cái|vỉ|bình)\b', '', clean_name, flags=re.IGNORECASE)
+    clean_name = re.sub(r'(?:giá|đơn giá)\s*[:\s]*\d+.*?(k|nghìn|ngàn|vnd|vnđ|đ|\b)', '', clean_name, flags=re.IGNORECASE)
+    clean_name = re.sub(r'\b\d+\s*(?:k|nghìn|ngàn)\b', '', clean_name, flags=re.IGNORECASE)
+    clean_name = re.sub(r'(?:date|hạn|hsd|hết hạn|exp)\s*[:\s]*[\d\/\-]+', '', clean_name, flags=re.IGNORECASE)
+    clean_name = re.sub(r'(?:ncc|nhà cung cấp|cty|công ty|mua của|từ)\s+[^,\n.]+', '', clean_name, flags=re.IGNORECASE)
+    clean_name = re.sub(r'[,\.;]+', ' ', clean_name).strip()
+    clean_name = re.sub(r'\s+', ' ', clean_name)
+    if len(clean_name) >= 2:
+        res["name"] = clean_name[:100].strip()
+    else:
+        res["name"] = raw[:80].strip()
+
+    return res
+
+
+def parse_supply_with_ai(text: str, api_key: str = "") -> dict:
+    """Uses Gemini API with JSON structured output, falls back to rule-based regex."""
+    fallback = parse_supply_fallback(text)
+    system_instruction = (
+        "Bạn là trợ lý thông minh của Nha Khoa NiBi - Bác sĩ Thắng. "
+        "Nhiệm vụ của bạn là bóc tách thông tin vật tư, thuốc, dụng cụ y tế từ văn bản tiếng Việt "
+        "thành JSON có cấu trúc chính xác.\n"
+        "Các trường JSON yêu cầu:\n"
+        "- name: tên thuốc / vật tư chuẩn hóa, viết hoa chữ cái đầu (VD: 'Thuốc tê Pháp Septanest 4%')\n"
+        "- category: một trong ['Vật liệu tiêu hao', 'Thuốc & Tê', 'Trám răng & Điều trị', 'Chỉnh nha', 'Răng giả & Labo', 'Dụng cụ & Khác']\n"
+        "- unit: đơn vị tính (Hộp, Ống, Tuýp, Lọ, Gói, Chiếc, Bộ, Cuộn, Cái)\n"
+        "- quantity: số lượng (số nguyên dương, mặc định 1)\n"
+        "- min_threshold: mức tồn tối thiểu cần báo động (số nguyên, mặc định 5)\n"
+        "- expiry_date: ngày hết hạn định dạng 'YYYY-MM-DD' hoặc null nếu không nói\n"
+        "- unit_price: đơn giá nhập bằng VNĐ (số nguyên, VD: 450k -> 450000)\n"
+        "- supplier: tên nhà cung cấp nếu có hoặc rỗng\n"
+        "- notes: ghi chú thêm nếu có\n"
+        "Chỉ trả về JSON thuần túy, không có markdown formatting."
+    )
+    prompt = f"Phân tích thông tin vật tư từ đoạn văn bản sau:\n\"{text.strip()}\""
+
+    try:
+        raw_res = call_gemini_api(prompt, system_instruction=system_instruction, api_key=api_key, json_mode=True)
+        if raw_res:
+            cleaned = raw_res.strip()
+            if cleaned.startswith("```"):
+                cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned)
+                cleaned = re.sub(r'\s*```$', '', cleaned)
+            parsed = json.loads(cleaned)
+            result = {
+                "name": str(parsed.get("name") or fallback["name"]).strip(),
+                "category": str(parsed.get("category") or fallback["category"]).strip(),
+                "unit": str(parsed.get("unit") or fallback["unit"]).strip(),
+                "quantity": int(parsed.get("quantity") or fallback["quantity"]),
+                "min_threshold": int(parsed.get("min_threshold") or fallback["min_threshold"]),
+                "expiry_date": parsed.get("expiry_date") or fallback["expiry_date"],
+                "unit_price": int(parsed.get("unit_price") or fallback["unit_price"]),
+                "supplier": str(parsed.get("supplier") or fallback["supplier"]).strip(),
+                "notes": str(parsed.get("notes") or fallback["notes"]).strip(),
+                "ai_source": "gemini"
+            }
+            return result
+    except Exception:
+        pass
+
+    fallback["ai_source"] = "rule_based"
+    return fallback
+

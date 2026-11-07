@@ -31,6 +31,23 @@ def auto_fit_columns(ws, min_width=10, max_width=50):
             max_len = max(max_len, len(val))
         ws.column_dimensions[col_letter].width = max(min(max_len + 3, max_width), min_width)
 
+def safe_k(val):
+    if not val:
+        return 0.0
+    try:
+        return round(float(val) / 1000, 1)
+    except (ValueError, TypeError):
+        return 0.0
+
+def safe_age(current_year, yob):
+    if not yob:
+        return ""
+    try:
+        y = int(str(yob).strip())
+        return current_year - y
+    except (ValueError, TypeError):
+        return ""
+
 def generate_nibi_excel_workbook() -> io.BytesIO:
     wb = Workbook()
     # Remove default sheet
@@ -106,10 +123,10 @@ def generate_nibi_excel_workbook() -> io.BytesIO:
         for r_idx, r in enumerate(rows1, 2):
             pk, ngay, ho_ten, nam_sinh, sdt, dia_chi, hang_muc, nha_sy, dieu_tri, cost, thanh_toan, da_thu, hen_dtri, ghi_chu = r
             
-            cost_k = round(cost / 1000, 1) if cost else 0
-            paid_k = round(da_thu / 1000, 1) if da_thu else 0
+            cost_k = safe_k(cost)
+            paid_k = safe_k(da_thu)
             debt_k = max(round(cost_k - paid_k, 1), 0)
-            tuoi = (current_year - nam_sinh) if nam_sinh else ""
+            tuoi = safe_age(current_year, nam_sinh)
 
             if debt_k == 0:
                 trang_thai = "Đã xong"
@@ -189,7 +206,7 @@ def generate_nibi_excel_workbook() -> io.BytesIO:
         sum_debt_k = 0
         for r_idx, r in enumerate(rows2, 2):
             pid, code, name, yob, phone, address, branch, oldest, debt, details = r
-            debt_k = round(debt / 1000, 1)
+            debt_k = safe_k(debt)
             sum_debt_k += debt_k
 
             row_data = [
@@ -286,7 +303,7 @@ def generate_nibi_excel_workbook() -> io.BytesIO:
 
         for r_idx, r in enumerate(rows4, 2):
             category, visit_date, branch, code, name, yob, phone, address, dentist, procedure, cost, next_appt = r
-            cost_k = round(cost / 1000, 1) if cost else 0
+            cost_k = safe_k(cost)
 
             row_data = [
                 (r_idx - 1, align_center, None),
@@ -342,10 +359,10 @@ def generate_nibi_excel_workbook() -> io.BytesIO:
 
         for r_idx, r in enumerate(rows5, 2):
             pid, code, name, yob, phone, phone_note, address, branch, med_hist, visits, cost, paid, debt = r
-            tuoi = (current_year - yob) if yob else ""
-            cost_k = round(cost / 1000, 1)
-            paid_k = round(paid / 1000, 1)
-            debt_k = round(debt / 1000, 1)
+            tuoi = safe_age(current_year, yob)
+            cost_k = safe_k(cost)
+            paid_k = safe_k(paid)
+            debt_k = safe_k(debt)
 
             row_data = [
                 (r_idx - 1, align_center, None),
@@ -395,9 +412,9 @@ def generate_nibi_excel_workbook() -> io.BytesIO:
             b_transfer = conn.execute("SELECT COALESCE(SUM(p.amount), 0) FROM payments p JOIN treatments t ON t.id = p.treatment_id WHERE (t.branch = ? OR (t.branch IS NULL AND p.patient_id IN (SELECT id FROM patients WHERE branch = ?))) AND p.method LIKE '%Chuyển khoản%'", (b, b)).fetchone()[0]
             b_visits = conn.execute("SELECT COUNT(id) FROM treatments WHERE branch = ? OR (branch IS NULL AND patient_id IN (SELECT id FROM patients WHERE branch = ?))", (b, b)).fetchone()[0]
 
-            cost_k = round(b_cost / 1000, 1)
-            cash_k = round(b_cash / 1000, 1)
-            transfer_k = round(b_transfer / 1000, 1)
+            cost_k = safe_k(b_cost)
+            cash_k = safe_k(b_cash)
+            transfer_k = safe_k(b_transfer)
             collected_k = round(cash_k + transfer_k, 1)
             debt_k = max(round(cost_k - collected_k, 1), 0)
 
@@ -431,6 +448,94 @@ def generate_nibi_excel_workbook() -> io.BytesIO:
         create_styled_cell(ws6, last_b_row, 7, total_all_debt, font=font_bold, fill=fill_summary, alignment=align_right, border=border_all, number_format="#,##0.0")
 
         auto_fit_columns(ws6)
+
+        # =========================================================================
+        # 7. SHEET: Vật Tư & Tồn Kho (Kho Thuốc, Cảnh Báo Date & Tồn Kho)
+        # =========================================================================
+        ws7 = wb.create_sheet(title="Vật Tư & Tồn Kho")
+        ws7.views.sheetView[0].showGridLines = True
+        ws7.freeze_panes = "A2"
+
+        fill_date_red = PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid")
+        fill_date_yellow = PatternFill(start_color="FEF3C7", end_color="FEF3C7", fill_type="solid")
+        fill_date_green = PatternFill(start_color="D1FAE5", end_color="D1FAE5", fill_type="solid")
+        fill_low_stock = PatternFill(start_color="FFEDD5", end_color="FFEDD5", fill_type="solid")
+
+        headers7 = [
+            "Mã VT", "Tên Vật Tư / Thuốc", "Nhóm Danh Mục", "ĐVT",
+            "Số Lượng Tồn", "Tồn Tối Thiểu", "Hạn Dùng (HSD)", "Tình Trạng HSD",
+            "Đơn Giá (K)", "Thành Tiền (K)", "Nhà Cung Cấp", "Cơ Sở", "Ghi Chú"
+        ]
+        for col_idx, h in enumerate(headers7, 1):
+            create_styled_cell(ws7, 1, col_idx, h, font=font_header, fill=fill_teal, alignment=align_center, border=border_all)
+        ws7.row_dimensions[1].height = 26
+
+        sup_rows = conn.execute("SELECT * FROM supplies ORDER BY CASE WHEN quantity <= min_threshold THEN 0 ELSE 1 END, id DESC").fetchall()
+        today = dt.date.today()
+        total_sup_val = 0
+
+        for r_idx, s in enumerate(sup_rows, 2):
+            s_dict = dict(s)
+            qty = int(s_dict.get("quantity") or 0)
+            min_th = int(s_dict.get("min_threshold") or 0)
+            price_k = safe_k(s_dict.get("unit_price") or 0)
+            val_k = round(qty * price_k, 1)
+            total_sup_val += val_k
+
+            exp_str = s_dict.get("expiry_date") or ""
+            date_status_txt = "Không có HSD"
+            status_fill = None
+
+            if exp_str:
+                try:
+                    exp_d = dt.date.fromisoformat(str(exp_str)[:10])
+                    days_left = (exp_d - today).days
+                    if days_left < 0:
+                        date_status_txt = f"🔴 ĐÃ HẾT HẠN ({abs(days_left)} ngày)"
+                        status_fill = fill_date_red
+                    elif days_left <= 30:
+                        date_status_txt = f"🔴 CẬN DATE ({days_left} ngày)"
+                        status_fill = fill_date_red
+                    elif days_left <= 180:
+                        months_left = max(1, days_left // 30)
+                        date_status_txt = f"🟡 CẢNH BÁO (~{months_left} tháng)"
+                        status_fill = fill_date_yellow
+                    elif days_left > 365:
+                        date_status_txt = "🟢 AN TOÀN (> 1 năm)"
+                        status_fill = fill_date_green
+                    else:
+                        date_status_txt = "Bình thường (6-12 tháng)"
+                except Exception:
+                    date_status_txt = exp_str
+
+            is_low = qty <= min_th
+            qty_fill = fill_low_stock if is_low else None
+
+            row_data = [
+                (s_dict.get("code") or f"VT{s_dict.get('id', 0):05d}", align_center, None, font_bold, None),
+                (s_dict.get("name") or "", align_left, None, font_bold, None),
+                (s_dict.get("category") or "", align_center, None, font_regular, None),
+                (s_dict.get("unit") or "", align_center, None, font_regular, None),
+                (qty, align_center, None, font_bold if is_low else font_regular, qty_fill),
+                (min_th, align_center, None, font_regular, None),
+                (exp_str, align_center, None, font_regular, None),
+                (date_status_txt, align_center, None, font_bold if status_fill else font_regular, status_fill),
+                (price_k, align_right, "#,##0.0", font_regular, None),
+                (val_k, align_right, "#,##0.0", font_bold, None),
+                (s_dict.get("supplier") or "", align_left, None, font_regular, None),
+                (s_dict.get("branch") or "Ninh Vân", align_center, None, font_regular, None),
+                (s_dict.get("notes") or "", align_left, None, font_regular, None),
+            ]
+
+            for c_idx, (val, aln, num_f, fnt, f_cell) in enumerate(row_data, 1):
+                create_styled_cell(ws7, r_idx, c_idx, val, font=fnt, fill=f_cell, alignment=aln, border=border_all, number_format=num_f)
+            ws7.row_dimensions[r_idx].height = 22
+
+        last_s_row = len(sup_rows) + 2
+        create_styled_cell(ws7, last_s_row, 1, "TỔNG GIÁ TRỊ TỒN KHO:", font=font_bold, fill=fill_summary, alignment=align_center, border=border_all)
+        create_styled_cell(ws7, last_s_row, 10, round(total_sup_val, 1), font=font_bold, fill=fill_summary, alignment=align_right, border=border_all, number_format="#,##0.0")
+
+        auto_fit_columns(ws7)
 
     output = io.BytesIO()
     wb.save(output)

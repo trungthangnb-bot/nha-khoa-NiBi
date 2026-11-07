@@ -167,6 +167,13 @@
                 </div>
                 <span id="badge-appt-today" class="hidden px-2 py-0.5 text-[10px] font-bold rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30">0</span>
             </button>
+            <button onclick="switchTab('supplies')" data-tab-btn="supplies" class="nav-item w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition text-left text-slate-400 hover:text-white hover:bg-slate-800/60">
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-boxes-stacked w-5 text-center"></i>
+                    <span>Vật tư & Kho</span>
+                </div>
+                <span id="badge-supplies-alert" class="hidden px-2 py-0.5 text-[10px] font-bold rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30">0</span>
+            </button>
 
             <!-- Dedicated Admin Management Hub -->
             <div class="pt-3 mt-2 border-t border-slate-800 admin-only">
@@ -294,6 +301,15 @@
                         <span class="text-xs font-semibold">Lịch hẹn & Tái khám</span>
                     </div>
                     <span id="badge-appt-today-drawer" class="hidden px-2 py-0.5 text-[10px] font-bold rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30">0</span>
+                </button>
+
+                <!-- Supplies -->
+                <button type="button" onclick="switchTab('supplies')" data-tab-btn="supplies" class="nav-item w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition text-left text-slate-400 hover:text-white hover:bg-slate-800/60">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-solid fa-boxes-stacked w-5 text-center"></i>
+                        <span class="text-xs font-semibold">Vật tư & Kho</span>
+                    </div>
+                    <span id="badge-supplies-alert-drawer" class="hidden px-2 py-0.5 text-[10px] font-bold rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30">0</span>
                 </button>
             </nav>
 
@@ -927,6 +943,142 @@
                         <div id="audit-logs-container" class="space-y-2.5 max-h-96 overflow-y-auto custom-scrollbar">
                             <!-- Populated dynamically -->
                         </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== TAB: SUPPLIES & INVENTORY ==================== -->
+            <section id="tab-supplies" class="hidden space-y-5">
+                <!-- Top Summary Alert Cards -->
+                <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
+                    <!-- Red Alert Card: <= 1 month / expired -->
+                    <div onclick="setSupplyFilterType('red')" class="cursor-pointer bg-white p-4 rounded-2xl border-2 border-rose-200 hover:border-rose-400 bg-rose-50/20 shadow-sm transition group">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-rose-700">🔴 Báo Đỏ Date</span>
+                            <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
+                        </div>
+                        <h3 id="stat-sup-red" class="text-2xl md:text-3xl font-extrabold text-rose-700 mt-1">0</h3>
+                        <p class="text-[11px] text-rose-600 font-medium mt-1">Cận date &le; 30 ngày</p>
+                    </div>
+
+                    <!-- Yellow Warning Card: 1-6 months -->
+                    <div onclick="setSupplyFilterType('yellow')" class="cursor-pointer bg-white p-4 rounded-2xl border-2 border-amber-200 hover:border-amber-400 bg-amber-50/20 shadow-sm transition group">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-amber-700">🟡 Cảnh Báo Date</span>
+                            <i class="fa-solid fa-triangle-exclamation text-amber-500 text-xs"></i>
+                        </div>
+                        <h3 id="stat-sup-yellow" class="text-2xl md:text-3xl font-extrabold text-amber-700 mt-1">0</h3>
+                        <p class="text-[11px] text-amber-600 font-medium mt-1">Date còn 1 - 6 tháng</p>
+                    </div>
+
+                    <!-- Green Safe Card: > 1 year -->
+                    <div onclick="setSupplyFilterType('green')" class="cursor-pointer bg-white p-4 rounded-2xl border-2 border-emerald-200 hover:border-emerald-400 bg-emerald-50/20 shadow-sm transition group">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-emerald-700">🟢 Date An Toàn</span>
+                            <i class="fa-solid fa-shield-halved text-emerald-500 text-xs"></i>
+                        </div>
+                        <h3 id="stat-sup-green" class="text-2xl md:text-3xl font-extrabold text-emerald-700 mt-1">0</h3>
+                        <p class="text-[11px] text-emerald-600 font-medium mt-1">Date dồi dào &gt; 1 năm</p>
+                    </div>
+
+                    <!-- Low Stock Alert Card -->
+                    <div onclick="setSupplyFilterType('low_stock')" class="cursor-pointer bg-white p-4 rounded-2xl border-2 border-purple-200 hover:border-purple-400 bg-purple-50/20 shadow-sm transition group">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-purple-700">⚠️ Sắp Hết Hàng</span>
+                            <i class="fa-solid fa-box-open text-purple-500 text-xs"></i>
+                        </div>
+                        <h3 id="stat-sup-low" class="text-2xl md:text-3xl font-extrabold text-purple-700 mt-1">0</h3>
+                        <p class="text-[11px] text-purple-600 font-medium mt-1">&le; Ngưỡng tối thiểu</p>
+                    </div>
+
+                    <!-- Admin Inventory Value Card -->
+                    <div class="col-span-2 lg:col-span-1 bg-gradient-to-br from-teal-700 to-teal-900 p-4 rounded-2xl text-white shadow-md flex flex-col justify-between">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-teal-200">Kho Vật Tư NiBi</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full bg-white/20 font-bold" id="stat-sup-total-count">0 loại</span>
+                        </div>
+                        <div class="mt-2">
+                            <p class="text-[10px] text-teal-200 admin-only">Tổng giá trị kho:</p>
+                            <h3 id="stat-sup-total-val" class="text-lg md:text-xl font-black text-amber-300 admin-only">0 VNĐ</h3>
+                            <p class="text-[11px] text-teal-100 staff-only">Đã sẵn sàng xuất/nhập</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Toolbar & Filters -->
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <!-- Search & Category -->
+                        <div class="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                            <div class="relative flex-1">
+                                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                                <input type="text" id="supplies-search" oninput="debounceSupplySearch()" placeholder="Tìm tên vật tư, thuốc, mã VT, nhà cung cấp..." class="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white focus:border-teal-500 outline-none transition">
+                                <button type="button" onclick="clearSupplySearch()" id="btn-clear-sup-search" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                    <i class="fa-solid fa-xmark text-xs"></i>
+                                </button>
+                            </div>
+                            <select id="supplies-category-filter" onchange="onSupplyCategoryChange(this.value)" class="bg-slate-50 border border-slate-200 text-slate-700 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-teal-500">
+                                <option value="">📦 Tất cả nhóm</option>
+                                <option value="Vật liệu tiêu hao">Vật liệu tiêu hao</option>
+                                <option value="Thuốc & Tê">Thuốc & Tê</option>
+                                <option value="Trám răng & Điều trị">Trám răng & Điều trị</option>
+                                <option value="Chỉnh nha">Chỉnh nha</option>
+                                <option value="Răng giả & Labo">Răng giả & Labo</option>
+                                <option value="Dụng cụ & Khác">Dụng cụ & Khác</option>
+                            </select>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <button onclick="openSupplyAiModal()" class="px-3 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-xl text-xs font-bold shadow-sm shadow-indigo-600/30 flex items-center gap-1.5 transition">
+                                <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i>
+                                <span>⚡ Nhập AI</span>
+                            </button>
+                            <button onclick="openSupplyModal()" class="px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-md shadow-teal-600/20 flex items-center gap-1.5 transition">
+                                <i class="fa-solid fa-plus"></i>
+                                <span>+ Thêm vật tư</span>
+                            </button>
+                            <button onclick="openSupplyTransactionsModal()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition" title="Xem lịch sử xuất nhập kho">
+                                <i class="fa-solid fa-clock-rotate-left text-slate-500"></i>
+                                <span class="hidden sm:inline">Lịch sử xuất/nhập</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Filter Type Pills -->
+                    <div class="flex items-center gap-1.5 flex-wrap pt-2 border-t border-slate-100 text-xs">
+                        <span class="text-[11px] font-bold uppercase text-slate-400 mr-1">Bộ lọc:</span>
+                        <button onclick="setSupplyFilterType('all')" data-sup-filter="all" class="sup-filter-pill px-3 py-1 rounded-full font-bold bg-slate-800 text-white shadow-xs transition">Tất cả</button>
+                        <button onclick="setSupplyFilterType('red')" data-sup-filter="red" class="sup-filter-pill px-3 py-1 rounded-full font-semibold text-rose-700 hover:bg-rose-50 transition border border-rose-200">🔴 Cận date (&le; 1 tháng)</button>
+                        <button onclick="setSupplyFilterType('yellow')" data-sup-filter="yellow" class="sup-filter-pill px-3 py-1 rounded-full font-semibold text-amber-700 hover:bg-amber-50 transition border border-amber-200">🟡 Cảnh báo (1 - 6 tháng)</button>
+                        <button onclick="setSupplyFilterType('green')" data-sup-filter="green" class="sup-filter-pill px-3 py-1 rounded-full font-semibold text-emerald-700 hover:bg-emerald-50 transition border border-emerald-200">🟢 Date dài (&gt; 1 năm)</button>
+                        <button onclick="setSupplyFilterType('low_stock')" data-sup-filter="low_stock" class="sup-filter-pill px-3 py-1 rounded-full font-semibold text-purple-700 hover:bg-purple-50 transition border border-purple-200">⚠️ Sắp hết tồn kho</button>
+                    </div>
+                </div>
+
+                <!-- Supplies Table Card -->
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse min-w-[760px]">
+                            <thead>
+                                <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                                    <th class="py-3 px-4">Mã & Tên Vật Tư / Thuốc</th>
+                                    <th class="py-3 px-3">Nhóm & ĐVT</th>
+                                    <th class="py-3 px-4 text-center">Tồn Kho & Thao Tác 1 Chạm</th>
+                                    <th class="py-3 px-3">Hạn Sử Dụng (HSD)</th>
+                                    <th class="py-3 px-3 text-right">Đơn Giá</th>
+                                    <th class="py-3 px-4 text-center">Thao Tác</th>
+                                </tr>
+                            </thead>
+                            <tbody id="supplies-table-body" class="divide-y divide-slate-100 text-xs">
+                                <tr>
+                                    <td colspan="6" class="py-12 text-center text-slate-400">
+                                        <i class="fa-solid fa-spinner fa-spin text-2xl text-teal-600 mb-2"></i>
+                                        <p>Đang tải dữ liệu kho vật tư...</p>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </section>
@@ -1940,6 +2092,303 @@
                     <i class="fa-solid fa-paper-plane"></i>
                 </button>
             </form>
+        </div>
+    </div>
+
+    <!-- ==================== SUPPLY ADD / EDIT MODAL ==================== -->
+    <div id="supply-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-3 md:p-4 overflow-y-auto">
+        <div class="bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-slate-100 overflow-hidden my-auto max-h-[92vh] flex flex-col">
+            <!-- Header -->
+            <div class="bg-gradient-to-r from-teal-600 to-teal-700 px-5 py-4 text-white flex items-center justify-between flex-shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
+                        <i class="fa-solid fa-boxes-stacked text-sm"></i>
+                    </div>
+                    <div>
+                        <h3 id="supply-modal-title" class="font-bold text-base">Thêm Vật Tư / Thuốc Mới</h3>
+                        <p class="text-teal-100 text-xs">Quản lý số lượng tồn, cảnh báo date và phân loại thông minh</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeSupplyModal()" class="text-white/70 hover:text-white p-1 rounded-lg hover:bg-white/10 transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Form -->
+            <form id="supply-form" onsubmit="event.preventDefault(); submitSupplyForm();" class="p-5 overflow-y-auto custom-scrollbar space-y-4">
+                <input type="hidden" id="sup-id" value="">
+
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Tên vật tư / Thuốc <span class="text-rose-500">*</span></label>
+                    <input type="text" id="sup-name" required placeholder="Ví dụ: Thuốc tê Septanest 4%, Găng tay y tế Vglove, Composite 3M..." class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-bold focus:bg-white focus:border-teal-500 outline-none">
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Nhóm danh mục</label>
+                        <select id="sup-category" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-semibold focus:bg-white focus:border-teal-500 outline-none">
+                            <option value="Vật liệu tiêu hao">Vật liệu tiêu hao</option>
+                            <option value="Thuốc & Tê">Thuốc & Tê</option>
+                            <option value="Trám răng & Điều trị">Trám răng & Điều trị</option>
+                            <option value="Chỉnh nha">Chỉnh nha</option>
+                            <option value="Răng giả & Labo">Răng giả & Labo</option>
+                            <option value="Dụng cụ & Khác">Dụng cụ & Khác</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Đơn vị tính (ĐVT)</label>
+                        <select id="sup-unit" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-semibold focus:bg-white focus:border-teal-500 outline-none">
+                            <option value="Hộp">Hộp</option>
+                            <option value="Ống">Ống</option>
+                            <option value="Tuýp">Tuýp</option>
+                            <option value="Lọ">Lọ</option>
+                            <option value="Gói">Gói</option>
+                            <option value="Chiếc">Chiếc</option>
+                            <option value="Bộ">Bộ</option>
+                            <option value="Cuộn">Cuộn</option>
+                            <option value="Cái">Cái</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Số lượng tồn kho</label>
+                        <input type="number" id="sup-quantity" min="0" value="0" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-bold text-center focus:bg-white focus:border-teal-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Mức tồn tối thiểu</label>
+                        <input type="number" id="sup-min-threshold" min="0" value="5" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-bold text-center focus:bg-white focus:border-teal-500 outline-none" title="Khi số lượng dưới mức này sẽ cảnh báo sắp hết hàng">
+                    </div>
+                    <div class="col-span-2 sm:col-span-1">
+                        <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Đơn giá (VNĐ)</label>
+                        <input type="text" id="sup-price" placeholder="450k hoặc 450000" oninput="formatSupPriceInput(this)" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-semibold focus:bg-white focus:border-teal-500 outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Hạn sử dụng (Date)</label>
+                        <input type="date" id="sup-expiry" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-semibold focus:bg-white focus:border-teal-500 outline-none">
+                        <p class="text-[10px] text-slate-400 mt-1">Cảnh báo: Đỏ (&le; 1 tháng), Vàng (1-6 tháng), Xanh (&gt; 1 năm)</p>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Cơ sở lưu trữ</label>
+                        <select id="sup-branch" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-semibold focus:bg-white focus:border-teal-500 outline-none">
+                            <option value="Ninh Vân">Ninh Vân</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Nhà cung cấp / Cty</label>
+                        <input type="text" id="sup-supplier" placeholder="Ví dụ: Cty Dược Thái Bình, 3M Việt Nam..." class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs focus:bg-white focus:border-teal-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Ghi chú thêm</label>
+                        <input type="text" id="sup-notes" placeholder="Quy cách đóng gói, vị trí để tủ..." class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs focus:bg-white focus:border-teal-500 outline-none">
+                    </div>
+                </div>
+
+                <!-- Footer buttons -->
+                <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                    <button type="button" onclick="closeSupplyModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition">Hủy bỏ</button>
+                    <button type="submit" id="btn-save-supply" class="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-md shadow-teal-600/20 transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-floppy-disk"></i>
+                        <span>Lưu thông tin</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==================== 1-TOUCH STOCK ADJUST MODAL ==================== -->
+    <div id="stock-adjust-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-3 md:p-4">
+        <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-100 overflow-hidden my-auto flex flex-col animate-slide-up">
+            <!-- Header -->
+            <div id="stock-adjust-header" class="px-5 py-4 text-white flex items-center justify-between flex-shrink-0 bg-rose-600">
+                <div class="flex items-center gap-2.5">
+                    <div id="stock-adjust-icon" class="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
+                        <i class="fa-solid fa-arrow-up-from-bracket text-sm"></i>
+                    </div>
+                    <div>
+                        <h3 id="stock-adjust-title" class="font-bold text-base">Xuất Dùng Kho Nhanh</h3>
+                        <p id="stock-adjust-subtitle" class="text-white/80 text-xs">Thao tác 1 chạm dành cho lễ tân / phụ tá</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeStockAdjustModal()" class="text-white/70 hover:text-white p-1 rounded-lg hover:bg-white/10 transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Form -->
+            <form id="stock-adjust-form" onsubmit="event.preventDefault(); submitStockAdjust();" class="p-5 space-y-4">
+                <input type="hidden" id="adj-sup-id" value="">
+                <input type="hidden" id="adj-mode" value="export">
+
+                <!-- Item Info Banner -->
+                <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                    <div>
+                        <h4 id="adj-item-name" class="font-bold text-slate-800 text-sm">--</h4>
+                        <p id="adj-item-sub" class="text-slate-500 text-[11px]">Mã VT: -- • Nhóm: --</p>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[10px] text-slate-400 uppercase font-bold block">Hiện có trong kho</span>
+                        <span id="adj-item-stock" class="text-lg font-black text-teal-700">0</span>
+                        <span id="adj-item-unit" class="text-xs font-semibold text-slate-600">--</span>
+                    </div>
+                </div>
+
+                <!-- Mode Toggle Tabs: Xuất Kho / Nhập Kho -->
+                <div class="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+                    <button type="button" id="tab-adj-export" onclick="setAdjustMode('export')" class="py-2 rounded-lg font-bold text-xs transition flex items-center justify-center gap-1.5 bg-rose-600 text-white shadow-xs">
+                        <i class="fa-solid fa-arrow-up-from-bracket"></i>
+                        <span>- Xuất Dùng</span>
+                    </button>
+                    <button type="button" id="tab-adj-import" onclick="setAdjustMode('import')" class="py-2 rounded-lg font-bold text-xs transition flex items-center justify-center gap-1.5 text-slate-600 hover:text-slate-800">
+                        <i class="fa-solid fa-arrow-down-to-bracket"></i>
+                        <span>+ Nhập Thêm</span>
+                    </button>
+                </div>
+
+                <!-- Quantity input with preset buttons -->
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-600 mb-1.5">Số lượng <span id="adj-mode-label">xuất kho</span></label>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="stepAdjustQty(-1)" class="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-slate-700 flex items-center justify-center text-lg active:scale-95 transition">-</button>
+                        <input type="number" id="adj-qty" min="1" value="1" required class="flex-1 h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-center font-black text-base text-slate-800 focus:bg-white focus:border-teal-500 outline-none">
+                        <button type="button" onclick="stepAdjustQty(1)" class="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-slate-700 flex items-center justify-center text-lg active:scale-95 transition">+</button>
+                    </div>
+                    <!-- Quick preset pills -->
+                    <div class="flex items-center gap-1.5 mt-2 flex-wrap">
+                        <span class="text-[10px] text-slate-400 font-semibold mr-1">Nhanh:</span>
+                        <button type="button" onclick="setAdjustQty(1)" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-700">1</button>
+                        <button type="button" onclick="setAdjustQty(2)" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-700">2</button>
+                        <button type="button" onclick="setAdjustQty(5)" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-700">5</button>
+                        <button type="button" onclick="setAdjustQty(10)" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-700">10</button>
+                        <button type="button" onclick="setAdjustQty(20)" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-700">20</button>
+                    </div>
+                </div>
+
+                <!-- Reason with quick chips -->
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-600 mb-1.5">Lý do điều chỉnh</label>
+                    <input type="text" id="adj-reason" placeholder="VD: Dùng cho bệnh nhân, bác sĩ chỉ định, kiểm kê..." class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-teal-500 outline-none">
+                    <div class="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        <button type="button" onclick="setAdjustReason('Dùng khám & điều trị ca bệnh')" class="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded text-[11px] text-slate-600">Khám & điều trị</button>
+                        <button type="button" onclick="setAdjustReason('Bác sĩ Thắng xuất dùng')" class="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded text-[11px] text-slate-600">BS Thắng xuất</button>
+                        <button type="button" onclick="setAdjustReason('Nhập bổ sung từ nhà cung cấp')" class="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded text-[11px] text-slate-600">Nhập từ NCC</button>
+                        <button type="button" onclick="setAdjustReason('Cân đối kiểm kê kho')" class="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded text-[11px] text-slate-600">Kiểm kê</button>
+                    </div>
+                </div>
+
+                <!-- Footer buttons -->
+                <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                    <button type="button" onclick="closeStockAdjustModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition">Đóng</button>
+                    <button type="submit" id="btn-submit-adjust" class="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-600/20 transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-check"></i>
+                        <span>Xác Nhận Xuất Kho</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==================== SUPPLY SMART AI INTAKE MODAL ==================== -->
+    <div id="supply-ai-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-3 md:p-4">
+        <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-100 overflow-hidden my-auto flex flex-col animate-slide-up">
+            <div class="bg-gradient-to-r from-indigo-600 via-indigo-700 to-teal-700 px-5 py-4 text-white flex items-center justify-between flex-shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
+                        <i class="fa-solid fa-wand-magic-sparkles text-amber-300 text-sm"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-base">⚡ Nhập Vật Tư Bằng AI NiBi</h3>
+                        <p class="text-indigo-100 text-xs">Gõ hoặc nói tự nhiên để AI bóc tách tên thuốc, hạn dùng, giá & số lượng</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeSupplyAiModal()" class="text-white/70 hover:text-white p-1 rounded-lg hover:bg-white/10 transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div class="p-5 space-y-4">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-600 mb-1.5">Nội dung vật tư hoặc thuốc nhập về</label>
+                    <div class="relative">
+                        <textarea id="supply-ai-text" rows="4" placeholder="Ví dụ: Nhập 20 hộp thuốc tê Pháp Septanest 4% date 2027 giá 450k nhà cung cấp Thái Bình..." class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-medium focus:bg-white focus:border-indigo-500 outline-none leading-relaxed"></textarea>
+                        <button type="button" id="btn-supply-ai-mic" onclick="startVoiceRecognition('supply-ai-text', 'btn-supply-ai-mic')" class="absolute right-3 bottom-3 text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-slate-100" title="Đọc giọng nói">
+                            <i class="fa-solid fa-microphone text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Example prompt chips -->
+                <div>
+                    <p class="text-[11px] font-bold text-slate-400 uppercase mb-1.5">Gợi ý câu mẫu:</p>
+                    <div class="flex flex-col gap-1.5 text-[11px]">
+                        <button type="button" onclick="fillSupplyAiPrompt('Nhập 20 hộp thuốc tê Pháp Artin 4% date 2027 giá 450k ncc Thái Bình')" class="text-left px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg transition border border-indigo-100">
+                            👉 "Nhập 20 hộp thuốc tê Pháp Artin 4% date 2027 giá 450k ncc Thái Bình"
+                        </button>
+                        <button type="button" onclick="fillSupplyAiPrompt('Mua 5 tuýp keo gắn trám Composite 3M hạn 15/12/2026 giá 320 nghìn')" class="text-left px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg transition border border-indigo-100">
+                            👉 "Mua 5 tuýp keo gắn trám Composite 3M hạn 15/12/2026 giá 320 nghìn"
+                        </button>
+                        <button type="button" onclick="fillSupplyAiPrompt('Găng tay y tế Vglove 10 hộp hạn 08/2027')" class="text-left px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg transition border border-indigo-100">
+                            👉 "Găng tay y tế Vglove 10 hộp hạn 08/2027"
+                        </button>
+                    </div>
+                </div>
+
+                <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                    <button type="button" onclick="closeSupplyAiModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition">Đóng</button>
+                    <button type="button" id="btn-run-supply-ai" onclick="runSupplyAiParse()" class="px-5 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-600/25 transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i>
+                        <span>Bóc Tách & Điền Form</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== SUPPLY TRANSACTION HISTORY MODAL ==================== -->
+    <div id="supply-transactions-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-3 md:p-4 overflow-y-auto">
+        <div class="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-100 overflow-hidden my-auto max-h-[90vh] flex flex-col animate-slide-up">
+            <div class="bg-slate-900 px-5 py-4 text-white flex items-center justify-between flex-shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-teal-500/20 text-teal-400 flex items-center justify-center">
+                        <i class="fa-solid fa-clock-rotate-left text-sm"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-base">📜 Lịch Sử Xuất & Nhập Kho</h3>
+                        <p class="text-slate-400 text-xs">Theo dõi chi tiết mọi lần xuất dùng và nhập kho</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeSupplyTransactionsModal()" class="text-white/70 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div class="p-4 overflow-y-auto custom-scrollbar flex-1">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase text-slate-500">
+                                <th class="py-2.5 px-3">Thời gian</th>
+                                <th class="py-2.5 px-3">Vật tư / Thuốc</th>
+                                <th class="py-2.5 px-3 text-center">Thao tác</th>
+                                <th class="py-2.5 px-3 text-center">Biến động</th>
+                                <th class="py-2.5 px-3 text-center">Kho (Trước &rarr; Sau)</th>
+                                <th class="py-2.5 px-3">Lý do</th>
+                                <th class="py-2.5 px-3">Người thực hiện</th>
+                            </tr>
+                        </thead>
+                        <tbody id="supply-transactions-body" class="divide-y divide-slate-100">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 

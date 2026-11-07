@@ -17,9 +17,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import db as dbm
-from .db import APPT_KINDS, APPT_STATUSES, BRANCHES, CATEGORIES, METHODS, db, patient_search_text
+from .db import APPT_KINDS, APPT_STATUSES, BRANCHES, CATEGORIES, METHODS, SUPPLY_CATEGORIES, SUPPLY_UNITS, db, patient_search_text
 from .excel_exporter import generate_nibi_excel_workbook
-from .ai_assistant import parse_intake_with_ai, answer_clinic_query
+from .ai_assistant import parse_intake_with_ai, answer_clinic_query, parse_supply_with_ai
 from .security import Limiter, hash_secret, new_token, token_digest, verify_secret
 from .textutil import clean, strip_accents
 
@@ -333,6 +333,8 @@ def meta(user=Depends(current_user)):
         "statuses": APPT_STATUSES,
         "dentists": dentists,
         "addresses": addresses,
+        "supply_categories": SUPPLY_CATEGORIES,
+        "supply_units": SUPPLY_UNITS,
         "today": today_iso(),
     }
 
@@ -1368,6 +1370,328 @@ def download_nibi_excel_full(user=Depends(admin_only)):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+
+
+# ───────────────────────── SUPPLIES & INVENTORY ─────────────────────────
+class SupplyIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    category: str = "Vật liệu tiêu hao"
+    unit: str = "Chiếc"
+    quantity: int = Field(default=0, ge=0)
+    min_threshold: int = Field(default=5, ge=0)
+    expiry_date: Optional[str] = None
+    unit_price: int = Field(default=0, ge=0)
+    supplier: str = ""
+    branch: str = "Ninh Vân"
+    notes: str = ""
+
+
+class SupplyEditIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    category: str = "Vật liệu tiêu hao"
+    unit: str = "Chiếc"
+    quantity: int = Field(default=0, ge=0)
+    min_threshold: int = Field(default=5, ge=0)
+    expiry_date: Optional[str] = None
+    unit_price: int = Field(default=0, ge=0)
+    supplier: str = ""
+    branch: str = "Ninh Vân"
+    notes: str = ""
+
+
+class StockAdjustIn(BaseModel):
+    delta: int = Field(description="Dương: Nhập, Âm: Xuất")
+    reason: str = ""
+
+
+class SupplyAiParseIn(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+def compute_date_status(exp_str: Optional[str], today: dt.date):
+    if not exp_str:
+        return None, "none"
+    try:
+        exp = dt.date.fromisoformat(str(exp_str)[:10])
+        days_left = (exp - today).days
+        if days_left <= 30:
+            return days_left, "red"
+        elif days_left <= 180:
+            return days_left, "yellow"
+        elif days_left > 365:
+            return days_left, "green"
+        else:
+            return days_left, "normal"
+    except Exception:
+        return None, "none"
+
+
+@app.get("/api/supplies")
+def get_supplies(
+    q: Optional[str] = None,
+    category: Optional[str] = None,
+    filter_type: Optional[str] = "all",
+    branch: Optional[str] = None,
+    user=Depends(current_user),
+):
+    today = dt.date.today()
+    with db() as conn:
+        sql = "SELECT * FROM supplies WHERE 1=1"
+        params = []
+        if branch:
+            sql += " AND branch = ?"
+            params.append(branch)
+        if category and category != "Tất cả":
+            sql += " AND category = ?"
+            params.append(category)
+        if q and q.strip():
+            for tok in strip_accents(q.strip()).split():
+                esc = tok.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                sql += " AND (name LIKE ? ESCAPE '\\' OR code LIKE ? ESCAPE '\\' OR supplier LIKE ? ESCAPE '\\')"
+                params.extend([f"%{esc}%", f"%{esc}%", f"%{esc}%"])
+
+        sql += " ORDER BY CASE WHEN quantity <= min_threshold THEN 0 ELSE 1 END, id DESC"
+        rows = conn.execute(sql, params).fetchall()
+
+        items = []
+        low_stock_count = 0
+        exp_red_count = 0
+        exp_yellow_count = 0
+        exp_green_count = 0
+        total_value = 0
+
+        for r in rows:
+            d = dict(r)
+            days_left, date_status = compute_date_status(d.get("expiry_date"), today)
+            d["days_left"] = days_left
+            d["date_status"] = date_status
+            is_low = int(d.get("quantity") or 0) <= int(d.get("min_threshold") or 0)
+            d["is_low_stock"] = is_low
+
+            if is_low:
+                low_stock_count += 1
+            if date_status == "red":
+                exp_red_count += 1
+            elif date_status == "yellow":
+                exp_yellow_count += 1
+            elif date_status == "green":
+                exp_green_count += 1
+
+            total_value += int(d.get("quantity") or 0) * int(d.get("unit_price") or 0)
+
+            if filter_type == "low_stock" and not is_low:
+                continue
+            if filter_type == "red" and date_status != "red":
+                continue
+            if filter_type == "yellow" and date_status != "yellow":
+                continue
+            if filter_type == "green" and date_status != "green":
+                continue
+
+            items.append(d)
+
+    return {
+        "items": items,
+        "summary": {
+            "total_items": len(rows),
+            "low_stock_count": low_stock_count,
+            "exp_red_count": exp_red_count,
+            "exp_yellow_count": exp_yellow_count,
+            "exp_green_count": exp_green_count,
+            "total_inventory_value": total_value if user["role"] == "admin" else 0,
+        },
+    }
+
+
+@app.post("/api/supplies")
+def create_supply(req: SupplyIn, user=Depends(current_user)):
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(422, "Tên vật tư không được để trống")
+    category = req.category if req.category in SUPPLY_CATEGORIES else "Vật liệu tiêu hao"
+    unit = req.unit if req.unit in SUPPLY_UNITS else "Chiếc"
+    branch = req.branch if req.branch in BRANCHES else BRANCHES[0]
+    exp = vdate(req.expiry_date, "Hạn sử dụng", required=False)
+
+    with db() as conn:
+        r_max = conn.execute("SELECT MAX(id) FROM supplies").fetchone()
+        next_id = (r_max[0] or 0) + 1
+        code = f"VT{next_id:05d}"
+
+        cur = conn.execute(
+            """INSERT INTO supplies(code, name, category, unit, quantity, min_threshold, expiry_date, unit_price, supplier, branch, notes)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (code, name, category, unit, req.quantity, req.min_threshold, exp, req.unit_price, req.supplier.strip(), branch, req.notes.strip()),
+        )
+        sup_id = cur.lastrowid
+
+        conn.execute(
+            """INSERT INTO supply_transactions(supply_id, supply_name, action, delta, quantity_before, quantity_after, reason, created_by)
+               VALUES(?, ?, 'init', ?, 0, ?, 'Tạo mới vật tư', ?)""",
+            (sup_id, name, req.quantity, req.quantity, user.get("full_name") or user.get("username")),
+        )
+
+        audit(
+            conn,
+            user,
+            "create",
+            entity="supplies",
+            entity_id=sup_id,
+            summary=f"Tạo vật tư mới [{code}] {name} (SL: {req.quantity} {unit})",
+        )
+
+        row = conn.execute("SELECT * FROM supplies WHERE id = ?", (sup_id,)).fetchone()
+        res = dict(row)
+        days_left, date_status = compute_date_status(res.get("expiry_date"), dt.date.today())
+        res["days_left"] = days_left
+        res["date_status"] = date_status
+        res["is_low_stock"] = res["quantity"] <= res["min_threshold"]
+        return res
+
+
+@app.put("/api/supplies/{sid}")
+def update_supply(sid: int, req: SupplyEditIn, user=Depends(current_user)):
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(422, "Tên vật tư không được để trống")
+    category = req.category if req.category in SUPPLY_CATEGORIES else "Vật liệu tiêu hao"
+    unit = req.unit if req.unit in SUPPLY_UNITS else "Chiếc"
+    branch = req.branch if req.branch in BRANCHES else BRANCHES[0]
+    exp = vdate(req.expiry_date, "Hạn sử dụng", required=False)
+
+    with db() as conn:
+        old = conn.execute("SELECT * FROM supplies WHERE id = ?", (sid,)).fetchone()
+        if not old:
+            raise HTTPException(404, "Không tìm thấy vật tư")
+
+        old_dict = dict(old)
+        old_qty = old_dict["quantity"]
+        new_qty = req.quantity
+
+        conn.execute(
+            """UPDATE supplies SET name=?, category=?, unit=?, quantity=?, min_threshold=?, expiry_date=?, unit_price=?, supplier=?, branch=?, notes=?, updated_at=datetime('now','localtime')
+               WHERE id=?""",
+            (name, category, unit, new_qty, req.min_threshold, exp, req.unit_price, req.supplier.strip(), branch, req.notes.strip(), sid),
+        )
+
+        if old_qty != new_qty:
+            delta = new_qty - old_qty
+            conn.execute(
+                """INSERT INTO supply_transactions(supply_id, supply_name, action, delta, quantity_before, quantity_after, reason, created_by)
+                   VALUES(?, ?, 'adjust', ?, ?, ?, 'Cân chỉnh tồn kho', ?)""",
+                (sid, name, delta, old_qty, new_qty, user.get("full_name") or user.get("username")),
+            )
+
+        audit(
+            conn,
+            user,
+            "update",
+            entity="supplies",
+            entity_id=sid,
+            summary=f"Cập nhật thông tin vật tư [{old_dict.get('code')}] {name}",
+        )
+
+        row = conn.execute("SELECT * FROM supplies WHERE id = ?", (sid,)).fetchone()
+        res = dict(row)
+        days_left, date_status = compute_date_status(res.get("expiry_date"), dt.date.today())
+        res["days_left"] = days_left
+        res["date_status"] = date_status
+        res["is_low_stock"] = res["quantity"] <= res["min_threshold"]
+        return res
+
+
+@app.post("/api/supplies/{sid}/adjust")
+def adjust_stock(sid: int, req: StockAdjustIn, user=Depends(current_user)):
+    """1-touch quick in/out for assistants/receptionists without requiring admin password."""
+    if req.delta == 0:
+        raise HTTPException(422, "Số lượng điều chỉnh phải khác 0")
+
+    with db() as conn:
+        row = conn.execute("SELECT * FROM supplies WHERE id = ?", (sid,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Không tìm thấy vật tư")
+
+        sup = dict(row)
+        curr_qty = sup["quantity"]
+        new_qty = curr_qty + req.delta
+
+        if new_qty < 0:
+            raise HTTPException(
+                400,
+                f"Kho hiện chỉ còn {curr_qty} {sup['unit']}, không thể xuất {abs(req.delta)} {sup['unit']}"
+            )
+
+        conn.execute(
+            "UPDATE supplies SET quantity=?, updated_at=datetime('now','localtime') WHERE id=?",
+            (new_qty, sid),
+        )
+
+        action = "import" if req.delta > 0 else "export"
+        default_reason = f"Nhập thêm {req.delta} {sup['unit']}" if req.delta > 0 else f"Xuất dùng {abs(req.delta)} {sup['unit']}"
+        reason = req.reason.strip() if req.reason and req.reason.strip() else default_reason
+
+        conn.execute(
+            """INSERT INTO supply_transactions(supply_id, supply_name, action, delta, quantity_before, quantity_after, reason, created_by)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?)""",
+            (sid, sup["name"], action, req.delta, curr_qty, new_qty, reason, user.get("full_name") or user.get("username")),
+        )
+
+        audit(
+            conn,
+            user,
+            action,
+            entity="supplies",
+            entity_id=sid,
+            summary=f"{'Nhập' if req.delta > 0 else 'Xuất'} [{sup.get('code')}] {sup['name']}: {req.delta:+d} {sup['unit']} (Kho: {curr_qty} -> {new_qty}) - Lý do: {reason}",
+        )
+
+        row_updated = conn.execute("SELECT * FROM supplies WHERE id = ?", (sid,)).fetchone()
+        res = dict(row_updated)
+        days_left, date_status = compute_date_status(res.get("expiry_date"), dt.date.today())
+        res["days_left"] = days_left
+        res["date_status"] = date_status
+        res["is_low_stock"] = res["quantity"] <= res["min_threshold"]
+        return {"ok": True, "supply": res}
+
+
+@app.delete("/api/supplies/{sid}")
+def delete_supply(sid: int, user=Depends(admin_only)):
+    with db() as conn:
+        row = conn.execute("SELECT * FROM supplies WHERE id = ?", (sid,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Không tìm thấy vật tư")
+        sup = dict(row)
+        conn.execute("DELETE FROM supplies WHERE id = ?", (sid,))
+        audit(
+            conn,
+            user,
+            "delete",
+            entity="supplies",
+            entity_id=sid,
+            summary=f"Xóa vật tư [{sup.get('code')}] {sup['name']}",
+        )
+    return {"ok": True}
+
+
+@app.get("/api/supplies/transactions")
+def get_supply_transactions(supply_id: Optional[int] = None, limit: int = 50, user=Depends(current_user)):
+    with db() as conn:
+        if supply_id:
+            rows = conn.execute(
+                "SELECT * FROM supply_transactions WHERE supply_id = ? ORDER BY id DESC LIMIT ?",
+                (supply_id, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM supply_transactions ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.post("/api/supplies/ai-parse")
+def ai_parse_supply(req: SupplyAiParseIn, user=Depends(current_user)):
+    return {"ok": True, "data": parse_supply_with_ai(req.text)}
 
 
 # ───────────────────────── static ─────────────────────────

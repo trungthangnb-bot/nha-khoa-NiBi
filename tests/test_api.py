@@ -485,6 +485,119 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(tv_staff["summary"]["total_billed"], 0)
         self.assertEqual(tv_staff["summary"]["total_paid"], 0)
 
+    def test_80_supplies_crud_adjust_and_date_rules(self):
+        # 1. Create items with different dates and thresholds
+        exp_green = iso(TODAY + dt.timedelta(days=400))  # > 1 year -> green
+        exp_yellow = iso(TODAY + dt.timedelta(days=90))  # 1 to 6 months -> yellow
+        exp_red = iso(TODAY + dt.timedelta(days=20))     # <= 30 days -> red
+
+        r1 = self.c.post("/api/supplies", json={
+            "name": "Thuốc tê Pháp Septanest 4%",
+            "category": "Thuốc & Tê",
+            "unit": "Hộp",
+            "quantity": 20,
+            "min_threshold": 5,
+            "expiry_date": exp_green,
+            "unit_price": 450000,
+            "supplier": "Thái Bình",
+            "branch": "Ninh Vân"
+        }, headers=self.staff)
+        self.assertEqual(r1.status_code, 200)
+        s1 = r1.json()
+        self.assertEqual(s1["date_status"], "green")
+        self.assertFalse(s1["is_low_stock"])
+        self.assertTrue(s1["code"].startswith("VT"))
+
+        r2 = self.c.post("/api/supplies", json={
+            "name": "Găng tay y tế Vglove",
+            "category": "Vật liệu tiêu hao",
+            "unit": "Hộp",
+            "quantity": 3,
+            "min_threshold": 5,
+            "expiry_date": exp_yellow,
+            "unit_price": 70000,
+            "supplier": "Nam Định",
+            "branch": "Ninh Vân"
+        }, headers=self.staff)
+        self.assertEqual(r2.status_code, 200)
+        s2 = r2.json()
+        self.assertEqual(s2["date_status"], "yellow")
+        self.assertTrue(s2["is_low_stock"])
+
+        r3 = self.c.post("/api/supplies", json={
+            "name": "Chất trám Composite 3M",
+            "category": "Trám răng & Điều trị",
+            "unit": "Tuýp",
+            "quantity": 10,
+            "min_threshold": 2,
+            "expiry_date": exp_red,
+            "unit_price": 320000,
+            "supplier": "Hà Nội",
+            "branch": "Ninh Vân"
+        }, headers=self.admin)
+        self.assertEqual(r3.status_code, 200)
+        s3 = r3.json()
+        self.assertEqual(s3["date_status"], "red")
+        self.assertFalse(s3["is_low_stock"])
+
+        # 2. Query supplies list and summary KPIs
+        list_res = self.c.get("/api/supplies", headers=self.admin).json()
+        summary = list_res["summary"]
+        self.assertGreaterEqual(summary["total_items"], 3)
+        self.assertGreaterEqual(summary["exp_green_count"], 1)
+        self.assertGreaterEqual(summary["exp_yellow_count"], 1)
+        self.assertGreaterEqual(summary["exp_red_count"], 1)
+        self.assertGreaterEqual(summary["low_stock_count"], 1)
+        self.assertGreater(summary["total_inventory_value"], 0)
+
+        # Staff gets masked 0 total inventory value
+        list_staff = self.c.get("/api/supplies", headers=self.staff).json()
+        self.assertEqual(list_staff["summary"]["total_inventory_value"], 0)
+
+        # Filter by filter_type
+        red_items = self.c.get("/api/supplies?filter_type=red", headers=self.staff).json()["items"]
+        self.assertTrue(all(it["date_status"] == "red" for it in red_items))
+        low_items = self.c.get("/api/supplies?filter_type=low_stock", headers=self.staff).json()["items"]
+        self.assertTrue(all(it["is_low_stock"] for it in low_items))
+
+        # 3. 1-Touch Stock Adjust by Staff without Admin Password
+        # Nhập thêm 5 hộp s1: 20 -> 25
+        adj_in = self.c.post(f"/api/supplies/{s1['id']}/adjust", json={"delta": 5, "reason": "Nhập thêm lô mới"}, headers=self.staff)
+        self.assertEqual(adj_in.status_code, 200)
+        self.assertEqual(adj_in.json()["supply"]["quantity"], 25)
+
+        # Xuất 3 hộp s1: 25 -> 22
+        adj_out = self.c.post(f"/api/supplies/{s1['id']}/adjust", json={"delta": -3, "reason": "Xuất làm ca sáng"}, headers=self.staff)
+        self.assertEqual(adj_out.status_code, 200)
+        self.assertEqual(adj_out.json()["supply"]["quantity"], 22)
+
+        # Exporting more than stock should fail with 400
+        fail_out = self.c.post(f"/api/supplies/{s1['id']}/adjust", json={"delta": -99, "reason": "Xuất quá tay"}, headers=self.staff)
+        self.assertEqual(fail_out.status_code, 400)
+
+        # 4. Check Transaction History
+        trans = self.c.get(f"/api/supplies/transactions?supply_id={s1['id']}", headers=self.staff).json()
+        self.assertGreaterEqual(len(trans), 3)  # init, +5, -3
+        actions = [t["action"] for t in trans]
+        self.assertIn("init", actions)
+        self.assertIn("import", actions)
+        self.assertIn("export", actions)
+
+        # 5. Delete: Staff forbidden, Admin allowed
+        self.assertEqual(self.c.delete(f"/api/supplies/{s3['id']}", headers=self.staff).status_code, 403)
+        self.assertEqual(self.c.delete(f"/api/supplies/{s3['id']}", headers=self.admin).status_code, 200)
+
+    def test_81_supplies_ai_parse(self):
+        text = "Nhập 15 hộp thuốc tê Artin date 2027 giá 400k ncc Hà Nội"
+        res = self.c.post("/api/supplies/ai-parse", json={"text": text}, headers=self.staff)
+        self.assertEqual(res.status_code, 200)
+        d = res.json()["data"]
+        self.assertEqual(d["quantity"], 15)
+        self.assertEqual(d["category"], "Thuốc & Tê")
+        self.assertEqual(d["unit"], "Hộp")
+        self.assertEqual(d["unit_price"], 400000)
+        self.assertEqual(d["supplier"], "Hà Nội")
+
     def test_99_logout_invalidates_token(self):
         h = self.login("letan", "abc123")
         self.assertEqual(self.c.post("/api/auth/logout", headers=h).status_code, 200)
