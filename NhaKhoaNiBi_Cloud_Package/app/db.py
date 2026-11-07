@@ -38,6 +38,8 @@ CATEGORIES = ["Tổng quát", "Nhổ răng", "Điều trị tủy", "Răng giả
 METHODS = ["Tiền mặt", "Chuyển khoản"]
 APPT_KINDS = ["hen_kham", "tai_kham"]
 APPT_STATUSES = ["Chờ đến", "Đã đến", "Lỡ hẹn", "Hủy"]
+SUPPLY_CATEGORIES = ["Vật liệu tiêu hao", "Thuốc & Tê", "Trám răng & Điều trị", "Chỉnh nha", "Răng giả & Labo", "Dụng cụ & Khác"]
+SUPPLY_UNITS = ["Hộp", "Ống", "Tuýp", "Lọ", "Gói", "Chiếc", "Bộ", "Cuộn", "Cái"]
 
 DEFAULT_ADMIN_PASSWORD = "123456"
 DEFAULT_EDIT_PIN = "0000"
@@ -140,6 +142,40 @@ CREATE TABLE IF NOT EXISTS audit_logs(
 );
 CREATE INDEX IF NOT EXISTS ix_audit_at ON audit_logs(at);
 CREATE INDEX IF NOT EXISTS ix_audit_unread ON audit_logs(is_read, action);
+
+CREATE TABLE IF NOT EXISTS supplies(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT UNIQUE,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'Vật liệu tiêu hao',
+    unit TEXT NOT NULL DEFAULT 'Chiếc',
+    quantity INTEGER NOT NULL DEFAULT 0,
+    min_threshold INTEGER NOT NULL DEFAULT 5,
+    expiry_date TEXT,
+    unit_price INTEGER NOT NULL DEFAULT 0,
+    supplier TEXT NOT NULL DEFAULT '',
+    branch TEXT NOT NULL DEFAULT 'Ninh Vân',
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX IF NOT EXISTS ix_supplies_exp ON supplies(expiry_date);
+CREATE INDEX IF NOT EXISTS ix_supplies_branch ON supplies(branch);
+
+CREATE TABLE IF NOT EXISTS supply_transactions(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    supply_id INTEGER NOT NULL REFERENCES supplies(id) ON DELETE CASCADE,
+    supply_name TEXT NOT NULL DEFAULT '',
+    action TEXT NOT NULL,
+    delta INTEGER NOT NULL,
+    quantity_before INTEGER NOT NULL DEFAULT 0,
+    quantity_after INTEGER NOT NULL DEFAULT 0,
+    reason TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX IF NOT EXISTS ix_sup_trans_sup ON supply_transactions(supply_id);
+CREATE INDEX IF NOT EXISTS ix_sup_trans_date ON supply_transactions(created_at);
 """
 
 
@@ -199,10 +235,9 @@ class TursoConnection:
         return TursoCursor(res_list[-1] if res_list else None)
 
     def executescript(self, script):
-        for s in script.split(";"):
-            s = s.strip()
-            if s:
-                self._client.execute(s)
+        stmts = [s.strip() for s in script.split(";") if s.strip()]
+        if stmts:
+            self._client.batch(stmts)
 
     def commit(self):
         pass

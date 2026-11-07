@@ -16,6 +16,11 @@ const state = {
     currentPatient: null,
     pinPromptCallback: null,
     adminPwCallback: null,
+    suppliesFilter: 'all',
+    suppliesCategory: '',
+    suppliesSearch: '',
+    suppliesItems: [],
+    suppliesDebounce: null,
 };
 
 // ==================== UTILITY FUNCTIONS ====================
@@ -498,6 +503,14 @@ async function onAuthenticated() {
         }
     }
 
+    // Fetch supplies badge count
+    try {
+        const supRes = await api('/api/supplies');
+        if (supRes && supRes.summary) {
+            updateSuppliesBadge(supRes.summary);
+        }
+    } catch (e) {}
+
     // Set today date on treatment default
     const today = new Date().toISOString().split('T')[0];
     const tDateInput = document.getElementById('pm-t-date');
@@ -552,7 +565,7 @@ async function switchTab(tab) {
     });
 
     // Hide all sections, show active
-    ['dashboard', 'patients', 'debts', 'appointments', 'admin-hub'].forEach(t => {
+    ['dashboard', 'patients', 'debts', 'appointments', 'admin-hub', 'supplies'].forEach(t => {
         const sec = document.getElementById(`tab-${t}`);
         if (sec) {
             if (t === tab) sec.classList.remove('hidden');
@@ -566,7 +579,8 @@ async function switchTab(tab) {
         patients: ['Hồ sơ bệnh nhân & Bệnh án', 'Tìm kiếm không dấu, xem đợt điều trị, tiền sử bệnh'],
         debts: ['Sổ quản lý công nợ', 'Thu hồi công nợ theo đợt điều trị, tự động cấn trừ FIFO'],
         appointments: ['Lịch hẹn & Tái khám', 'Quản lý lịch hẹn khám mới và nhắc tái khám'],
-        'admin-hub': ['Trung Tâm Quản Trị Hệ Thống', 'Doanh thu • Cấp quyền tài khoản • Chỉnh sửa ứng dụng • Sao lưu an toàn']
+        'admin-hub': ['Trung Tâm Quản Trị Hệ Thống', 'Doanh thu • Cấp quyền tài khoản • Chỉnh sửa ứng dụng • Sao lưu an toàn'],
+        supplies: ['Quản Lý Vật Tư & Kho Thuốc', 'Theo dõi xuất/nhập nhanh, hạn sử dụng và cảnh báo cận date']
     };
     if (titles[tab]) {
         document.getElementById('page-title').textContent = titles[tab][0];
@@ -583,6 +597,7 @@ async function switchTab(tab) {
     else if (tab === 'debts') await loadDebts();
     else if (tab === 'appointments') await filterAppointments(currentApptFilter || 'month');
     else if (tab === 'admin-hub') await loadAdminHub();
+    else if (tab === 'supplies') await loadSupplies();
 }
 
 function onBranchChange(val) {
@@ -3200,4 +3215,692 @@ async function submitAiChatMessage() {
     } finally {
         container.scrollTop = container.scrollHeight;
     }
+}
+
+// =========================================================================
+// ==================== QUẢN LÝ VẬT TƯ & KHO THUỐC =========================
+// =========================================================================
+
+async function loadSupplies() {
+    const tbody = document.getElementById('supplies-table-body');
+    if (!tbody) return;
+
+    try {
+        const q = state.suppliesSearch || '';
+        const cat = state.suppliesCategory || '';
+        const ftype = state.suppliesFilter || 'all';
+        const br = state.branchFilter || '';
+
+        const params = new URLSearchParams({
+            q: q,
+            category: cat,
+            filter_type: ftype,
+            branch: br
+        });
+
+        const res = await api(`/api/supplies?${params.toString()}`);
+        state.suppliesItems = res.items || [];
+        const summary = res.summary || {};
+
+        // Update KPI Cards
+        const redEl = document.getElementById('stat-sup-red');
+        const yellowEl = document.getElementById('stat-sup-yellow');
+        const greenEl = document.getElementById('stat-sup-green');
+        const lowEl = document.getElementById('stat-sup-low');
+        const countEl = document.getElementById('stat-sup-total-count');
+        const valEl = document.getElementById('stat-sup-total-val');
+
+        if (redEl) redEl.textContent = summary.exp_red_count || 0;
+        if (yellowEl) yellowEl.textContent = summary.exp_yellow_count || 0;
+        if (greenEl) greenEl.textContent = summary.exp_green_count || 0;
+        if (lowEl) lowEl.textContent = summary.low_stock_count || 0;
+        if (countEl) countEl.textContent = `${summary.total_items || 0} loại`;
+        if (valEl) valEl.textContent = formatVND(summary.total_inventory_value || 0);
+
+        // Update Badges on Sidebar
+        updateSuppliesBadge(summary);
+
+        renderSupplies(state.suppliesItems);
+    } catch (e) {
+        console.error('Error loading supplies:', e);
+        if (tbody) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="py-8 text-center text-rose-500">
+                        <i class="fa-solid fa-triangle-exclamation text-xl mb-1"></i>
+                        <p>Lỗi tải dữ liệu kho vật tư: ${escapeHtml(e.message)}</p>
+                    </td>
+                </tr>
+            `;
+        }
+    }
+}
+
+function updateSuppliesBadge(summary) {
+    const badge = document.getElementById('badge-supplies-alert');
+    const badgeDrawer = document.getElementById('badge-supplies-alert-drawer');
+    const alertCount = (summary?.exp_red_count || 0) + (summary?.low_stock_count || 0);
+
+    [badge, badgeDrawer].forEach(el => {
+        if (!el) return;
+        if (alertCount > 0) {
+            el.textContent = alertCount;
+            el.classList.remove('hidden');
+        } else {
+            el.classList.add('hidden');
+        }
+    });
+}
+
+function renderSupplies(items) {
+    const tbody = document.getElementById('supplies-table-body');
+    if (!tbody) return;
+
+    if (!items || items.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" class="py-12 text-center text-slate-400">
+                    <div class="w-16 h-16 mx-auto mb-2 rounded-2xl bg-slate-100 flex items-center justify-center text-2xl text-slate-400">
+                        <i class="fa-solid fa-boxes-packing"></i>
+                    </div>
+                    <p class="font-bold text-slate-600 text-sm">Chưa có vật tư nào phù hợp bộ lọc</p>
+                    <p class="text-xs text-slate-400 mt-0.5">Bấm <b>"+ Thêm vật tư"</b> hoặc <b>"⚡ Nhập AI"</b> để thêm mới</p>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    const catBadges = {
+        'Thuốc & Tê': 'bg-purple-50 text-purple-700 border-purple-200',
+        'Trám răng & Điều trị': 'bg-teal-50 text-teal-700 border-teal-200',
+        'Vật liệu tiêu hao': 'bg-sky-50 text-sky-700 border-sky-200',
+        'Chỉnh nha': 'bg-amber-50 text-amber-800 border-amber-200',
+        'Răng giả & Labo': 'bg-indigo-50 text-indigo-700 border-indigo-200',
+        'Dụng cụ & Khác': 'bg-slate-100 text-slate-700 border-slate-200'
+    };
+
+    const isAdmin = state.user && state.user.role === 'admin';
+
+    tbody.innerHTML = items.map(s => {
+        const catClass = catBadges[s.category] || 'bg-slate-100 text-slate-700 border-slate-200';
+        const isLow = s.quantity <= s.min_threshold;
+
+        let stockBadge = `
+            <span class="px-2.5 py-1 rounded-lg font-black text-sm ${isLow ? 'bg-purple-100 text-purple-900 border border-purple-300' : 'bg-slate-100 text-slate-800'}">
+                ${s.quantity} <span class="text-[11px] font-semibold text-slate-600">${escapeHtml(s.unit)}</span>
+            </span>
+        `;
+        if (isLow) {
+            stockBadge += `
+                <span class="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-200 text-purple-900" title="Tối thiểu ${s.min_threshold} ${escapeHtml(s.unit)}">
+                    ⚠️ Sắp hết
+                </span>
+            `;
+        }
+
+        let expHtml = '<span class="text-slate-400 italic">Không có date</span>';
+        if (s.expiry_date) {
+            const formattedDate = formatDateVN(s.expiry_date);
+            const days = s.days_left;
+
+            if (s.date_status === 'red') {
+                const label = (days !== null && days <= 0) ? `🔴 HẾT HẠN (${Math.abs(days)}d)` : `🔴 CẬN DATE (${days}d)`;
+                expHtml = `
+                    <div class="flex flex-col items-start gap-0.5">
+                        <span class="font-bold text-rose-700 text-xs">${formattedDate}</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">${label}</span>
+                    </div>
+                `;
+            } else if (s.date_status === 'yellow') {
+                const months = Math.max(1, Math.round(days / 30));
+                expHtml = `
+                    <div class="flex flex-col items-start gap-0.5">
+                        <span class="font-bold text-amber-800 text-xs">${formattedDate}</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">🟡 Cảnh báo (~${months}th)</span>
+                    </div>
+                `;
+            } else if (s.date_status === 'green') {
+                expHtml = `
+                    <div class="flex flex-col items-start gap-0.5">
+                        <span class="font-bold text-emerald-800 text-xs">${formattedDate}</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">🟢 An toàn (&gt; 1 năm)</span>
+                    </div>
+                `;
+            } else {
+                expHtml = `
+                    <div class="flex flex-col items-start gap-0.5">
+                        <span class="font-semibold text-slate-700 text-xs">${formattedDate}</span>
+                        <span class="px-1.5 py-0.2 rounded text-[10px] bg-slate-100 text-slate-600">6-12 tháng</span>
+                    </div>
+                `;
+            }
+        }
+
+        const priceText = s.unit_price > 0 ? formatMoneyK(s.unit_price) : '<span class="text-slate-400">--</span>';
+        const supplierText = s.supplier ? `<span class="text-[11px] text-slate-500 block truncate max-w-[200px]"><i class="fa-solid fa-truck-field text-[10px] text-slate-400 mr-1"></i>${escapeHtml(s.supplier)}</span>` : '';
+
+        return `
+            <tr class="hover:bg-slate-50/80 transition">
+                <td class="py-3 px-4">
+                    <div class="font-bold text-slate-900 text-sm leading-snug">${escapeHtml(s.name)}</div>
+                    <div class="flex items-center gap-1.5 mt-0.5">
+                        <span class="px-1.5 py-0.2 rounded bg-slate-100 font-mono text-[10px] font-bold text-slate-600">${escapeHtml(s.code || ('VT' + String(s.id).padStart(5, '0')))}</span>
+                        ${supplierText}
+                    </div>
+                </td>
+                <td class="py-3 px-3">
+                    <span class="inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold border ${catClass}">
+                        ${escapeHtml(s.category)}
+                    </span>
+                    <span class="block text-[11px] text-slate-400 mt-0.5">ĐVT: <b>${escapeHtml(s.unit)}</b></span>
+                </td>
+                <td class="py-3 px-4 text-center">
+                    <div class="flex items-center justify-center gap-2">
+                        <button type="button" onclick="openStockAdjustModal(${s.id}, 'export')"
+                                class="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 active:scale-90 text-rose-700 border border-rose-200 flex items-center justify-center font-bold text-sm shadow-2xs transition"
+                                title="Xuất dùng nhanh (Không cần mật khẩu)">
+                            <i class="fa-solid fa-minus"></i>
+                        </button>
+                        ${stockBadge}
+                        <button type="button" onclick="openStockAdjustModal(${s.id}, 'import')"
+                                class="w-7 h-7 rounded-lg bg-emerald-50 hover:bg-emerald-100 active:scale-90 text-emerald-700 border border-emerald-200 flex items-center justify-center font-bold text-sm shadow-2xs transition"
+                                title="Nhập thêm vào kho (Không cần mật khẩu)">
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                    </div>
+                </td>
+                <td class="py-3 px-3">
+                    ${expHtml}
+                </td>
+                <td class="py-3 px-3 text-right font-bold text-slate-800">
+                    ${priceText}
+                </td>
+                <td class="py-3 px-4 text-center">
+                    <div class="flex items-center justify-center gap-1">
+                        <button type="button" onclick="openSupplyTransactionsModal(${s.id})"
+                                class="p-1.5 text-slate-400 hover:text-teal-600 rounded-lg hover:bg-slate-100 transition"
+                                title="Lịch sử xuất nhập">
+                            <i class="fa-solid fa-clock-rotate-left text-xs"></i>
+                        </button>
+                        <button type="button" onclick="openSupplyModal(${s.id})"
+                                class="p-1.5 text-slate-400 hover:text-teal-600 rounded-lg hover:bg-slate-100 transition"
+                                title="Sửa thông tin">
+                            <i class="fa-solid fa-pen-to-square text-xs"></i>
+                        </button>
+                        ${isAdmin ? `
+                            <button type="button" onclick="deleteSupply(${s.id}, '${escapeHtml(s.name)}')"
+                                    class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition"
+                                    title="Xóa vật tư">
+                                <i class="fa-solid fa-trash-can text-xs"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function setSupplyFilterType(type) {
+    state.suppliesFilter = type;
+
+    document.querySelectorAll('.sup-filter-pill').forEach(btn => {
+        const btnType = btn.getAttribute('data-sup-filter');
+        if (btnType === type) {
+            btn.className = 'sup-filter-pill px-3 py-1 rounded-full font-bold bg-slate-800 text-white shadow-xs transition';
+        } else {
+            if (btnType === 'red') btn.className = 'sup-filter-pill px-3 py-1 rounded-full font-semibold text-rose-700 hover:bg-rose-50 transition border border-rose-200';
+            else if (btnType === 'yellow') btn.className = 'sup-filter-pill px-3 py-1 rounded-full font-semibold text-amber-700 hover:bg-amber-50 transition border border-amber-200';
+            else if (btnType === 'green') btn.className = 'sup-filter-pill px-3 py-1 rounded-full font-semibold text-emerald-700 hover:bg-emerald-50 transition border border-emerald-200';
+            else if (btnType === 'low_stock') btn.className = 'sup-filter-pill px-3 py-1 rounded-full font-semibold text-purple-700 hover:bg-purple-50 transition border border-purple-200';
+            else btn.className = 'sup-filter-pill px-3 py-1 rounded-full font-semibold text-slate-600 hover:bg-slate-100 transition border border-slate-200';
+        }
+    });
+
+    loadSupplies();
+}
+
+function debounceSupplySearch() {
+    clearTimeout(state.suppliesDebounce);
+    const input = document.getElementById('supplies-search');
+    const clearBtn = document.getElementById('btn-clear-sup-search');
+    if (clearBtn) {
+        if (input && input.value.trim()) clearBtn.classList.remove('hidden');
+        else clearBtn.classList.add('hidden');
+    }
+
+    state.suppliesDebounce = setTimeout(() => {
+        state.suppliesSearch = input ? input.value.trim() : '';
+        loadSupplies();
+    }, 300);
+}
+
+function clearSupplySearch() {
+    const input = document.getElementById('supplies-search');
+    const clearBtn = document.getElementById('btn-clear-sup-search');
+    if (input) input.value = '';
+    if (clearBtn) clearBtn.classList.add('hidden');
+    state.suppliesSearch = '';
+    loadSupplies();
+}
+
+function onSupplyCategoryChange(cat) {
+    state.suppliesCategory = cat || '';
+    loadSupplies();
+}
+
+// ==================== SUPPLY MODAL (ADD / EDIT) ====================
+function openSupplyModal(supOrId = null) {
+    const modal = document.getElementById('supply-modal');
+    if (!modal) return;
+
+    let s = null;
+    if (typeof supOrId === 'number' || typeof supOrId === 'string') {
+        s = state.suppliesItems.find(it => it.id === Number(supOrId));
+    } else if (typeof supOrId === 'object' && supOrId !== null) {
+        s = supOrId;
+    }
+
+    const titleEl = document.getElementById('supply-modal-title');
+    const idInput = document.getElementById('sup-id');
+    const nameInput = document.getElementById('sup-name');
+    const catInput = document.getElementById('sup-category');
+    const unitInput = document.getElementById('sup-unit');
+    const qtyInput = document.getElementById('sup-quantity');
+    const minInput = document.getElementById('sup-min-threshold');
+    const priceInput = document.getElementById('sup-price');
+    const expInput = document.getElementById('sup-expiry');
+    const branchInput = document.getElementById('sup-branch');
+    const supInput = document.getElementById('sup-supplier');
+    const notesInput = document.getElementById('sup-notes');
+
+    if (s && s.id) {
+        titleEl.textContent = `Chỉnh Sửa Vật Tư [${s.code || ('VT' + s.id)}]`;
+        idInput.value = s.id;
+        nameInput.value = s.name || '';
+        catInput.value = s.category || 'Vật liệu tiêu hao';
+        unitInput.value = s.unit || 'Chiếc';
+        qtyInput.value = s.quantity || 0;
+        minInput.value = s.min_threshold || 5;
+        priceInput.value = s.unit_price ? formatMoneyK(s.unit_price) : '';
+        expInput.value = s.expiry_date ? s.expiry_date.split('T')[0] : '';
+        branchInput.value = s.branch || 'Ninh Vân';
+        supInput.value = s.supplier || '';
+        notesInput.value = s.notes || '';
+    } else if (s && !s.id) {
+        titleEl.textContent = 'Thêm Vật Tư Mới (Từ AI NiBi)';
+        idInput.value = '';
+        nameInput.value = s.name || '';
+        catInput.value = s.category || 'Vật liệu tiêu hao';
+        unitInput.value = s.unit || 'Chiếc';
+        qtyInput.value = s.quantity || 1;
+        minInput.value = s.min_threshold || 5;
+        priceInput.value = s.unit_price ? formatMoneyK(s.unit_price) : '';
+        expInput.value = s.expiry_date ? s.expiry_date.split('T')[0] : '';
+        branchInput.value = 'Ninh Vân';
+        supInput.value = s.supplier || '';
+        notesInput.value = s.notes || '';
+    } else {
+        titleEl.textContent = 'Thêm Vật Tư / Thuốc Mới';
+        idInput.value = '';
+        nameInput.value = '';
+        catInput.value = 'Vật liệu tiêu hao';
+        unitInput.value = 'Hộp';
+        qtyInput.value = '1';
+        minInput.value = '5';
+        priceInput.value = '';
+        expInput.value = '';
+        branchInput.value = state.branchFilter || 'Ninh Vân';
+        supInput.value = '';
+        notesInput.value = '';
+    }
+
+    modal.classList.remove('hidden');
+    setTimeout(() => { if (nameInput) nameInput.focus(); }, 100);
+}
+
+function closeSupplyModal() {
+    const modal = document.getElementById('supply-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function formatSupPriceInput(el) {
+    let val = el.value.replace(/[^0-9]/g, '');
+    if (val) {
+        el.value = new Intl.NumberFormat('vi-VN').format(Number(val));
+    }
+}
+
+async function submitSupplyForm() {
+    const id = document.getElementById('sup-id').value;
+    const name = document.getElementById('sup-name').value.trim();
+    if (!name) {
+        showToast('Vui lòng nhập tên vật tư', 'error');
+        return;
+    }
+
+    const category = document.getElementById('sup-category').value;
+    const unit = document.getElementById('sup-unit').value;
+    const quantity = parseInt(document.getElementById('sup-quantity').value, 10) || 0;
+    const min_threshold = parseInt(document.getElementById('sup-min-threshold').value, 10) || 0;
+
+    let priceRaw = document.getElementById('sup-price').value.replace(/[^0-9]/g, '');
+    const unit_price = parseInt(priceRaw, 10) || 0;
+
+    const expiry_date = document.getElementById('sup-expiry').value || null;
+    const branch = document.getElementById('sup-branch').value || 'Ninh Vân';
+    const supplier = document.getElementById('sup-supplier').value.trim();
+    const notes = document.getElementById('sup-notes').value.trim();
+
+    const payload = {
+        name,
+        category,
+        unit,
+        quantity,
+        min_threshold,
+        unit_price,
+        expiry_date,
+        branch,
+        supplier,
+        notes
+    };
+
+    const btn = document.getElementById('btn-save-supply');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang lưu...';
+    }
+
+    try {
+        if (id) {
+            await api(`/api/supplies/${id}`, { method: 'PUT', body: payload });
+            showToast(`Đã cập nhật vật tư "${name}"`, 'success');
+        } else {
+            await api('/api/supplies', { method: 'POST', body: payload });
+            showToast(`Đã tạo mới vật tư "${name}"`, 'success');
+        }
+        closeSupplyModal();
+        await loadSupplies();
+    } catch (e) {
+        showToast(e.message || 'Lỗi lưu thông tin vật tư', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Lưu thông tin';
+        }
+    }
+}
+
+// ==================== 1-TOUCH STOCK ADJUST ====================
+function openStockAdjustModal(supplyId, mode = 'export') {
+    const modal = document.getElementById('stock-adjust-modal');
+    if (!modal) return;
+
+    const s = state.suppliesItems.find(it => it.id === Number(supplyId));
+    if (!s) return;
+
+    document.getElementById('adj-sup-id').value = s.id;
+    document.getElementById('adj-item-name').textContent = s.name;
+    document.getElementById('adj-item-sub').textContent = `Mã: ${s.code || ('VT' + s.id)} • Nhóm: ${s.category}`;
+    document.getElementById('adj-item-stock').textContent = s.quantity;
+    document.getElementById('adj-item-unit').textContent = s.unit;
+
+    document.getElementById('adj-qty').value = '1';
+    document.getElementById('adj-reason').value = '';
+
+    setAdjustMode(mode);
+
+    modal.classList.remove('hidden');
+}
+
+function closeStockAdjustModal() {
+    const modal = document.getElementById('stock-adjust-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function setAdjustMode(mode) {
+    document.getElementById('adj-mode').value = mode;
+
+    const header = document.getElementById('stock-adjust-header');
+    const icon = document.getElementById('stock-adjust-icon');
+    const title = document.getElementById('stock-adjust-title');
+    const sub = document.getElementById('stock-adjust-subtitle');
+    const tabExport = document.getElementById('tab-adj-export');
+    const tabImport = document.getElementById('tab-adj-import');
+    const modeLabel = document.getElementById('adj-mode-label');
+    const btnSubmit = document.getElementById('btn-submit-adjust');
+
+    if (mode === 'export') {
+        if (header) header.className = 'px-5 py-4 text-white flex items-center justify-between flex-shrink-0 bg-rose-600';
+        if (icon) icon.innerHTML = '<i class="fa-solid fa-arrow-up-from-bracket text-sm"></i>';
+        if (title) title.textContent = 'Xuất Dùng Kho Nhanh';
+        if (sub) sub.textContent = 'Thao tác 1 chạm dành cho lễ tân / phụ tá';
+        if (tabExport) tabExport.className = 'py-2 rounded-lg font-bold text-xs transition flex items-center justify-center gap-1.5 bg-rose-600 text-white shadow-xs';
+        if (tabImport) tabImport.className = 'py-2 rounded-lg font-bold text-xs transition flex items-center justify-center gap-1.5 text-slate-600 hover:text-slate-800';
+        if (modeLabel) modeLabel.textContent = 'xuất kho';
+        if (btnSubmit) {
+            btnSubmit.className = 'px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-600/20 transition flex items-center gap-1.5';
+            btnSubmit.innerHTML = '<i class="fa-solid fa-check"></i> Xác Nhận Xuất Kho';
+        }
+    } else {
+        if (header) header.className = 'px-5 py-4 text-white flex items-center justify-between flex-shrink-0 bg-teal-600';
+        if (icon) icon.innerHTML = '<i class="fa-solid fa-arrow-down-to-bracket text-sm"></i>';
+        if (title) title.textContent = 'Nhập Thêm Vào Kho';
+        if (sub) sub.textContent = 'Bổ sung số lượng tồn kho tức thì';
+        if (tabExport) tabExport.className = 'py-2 rounded-lg font-bold text-xs transition flex items-center justify-center gap-1.5 text-slate-600 hover:text-slate-800';
+        if (tabImport) tabImport.className = 'py-2 rounded-lg font-bold text-xs transition flex items-center justify-center gap-1.5 bg-teal-600 text-white shadow-xs';
+        if (modeLabel) modeLabel.textContent = 'nhập thêm';
+        if (btnSubmit) {
+            btnSubmit.className = 'px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-md shadow-teal-600/20 transition flex items-center gap-1.5';
+            btnSubmit.innerHTML = '<i class="fa-solid fa-check"></i> Xác Nhận Nhập Kho';
+        }
+    }
+}
+
+function stepAdjustQty(delta) {
+    const input = document.getElementById('adj-qty');
+    if (!input) return;
+    let val = (parseInt(input.value, 10) || 1) + delta;
+    if (val < 1) val = 1;
+    input.value = val;
+}
+
+function setAdjustQty(qty) {
+    const input = document.getElementById('adj-qty');
+    if (input) input.value = qty;
+}
+
+function setAdjustReason(reason) {
+    const input = document.getElementById('adj-reason');
+    if (input) input.value = reason;
+}
+
+async function submitStockAdjust() {
+    const sid = document.getElementById('adj-sup-id').value;
+    const mode = document.getElementById('adj-mode').value;
+    const qty = parseInt(document.getElementById('adj-qty').value, 10) || 0;
+    const reason = document.getElementById('adj-reason').value.trim();
+
+    if (qty <= 0) {
+        showToast('Số lượng điều chỉnh phải lớn hơn 0', 'error');
+        return;
+    }
+
+    const delta = (mode === 'export') ? -qty : qty;
+
+    const btn = document.getElementById('btn-submit-adjust');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+    }
+
+    try {
+        const res = await api(`/api/supplies/${sid}/adjust`, {
+            method: 'POST',
+            body: { delta, reason }
+        });
+
+        const s = res.supply;
+        showToast(`${mode === 'export' ? 'Đã xuất' : 'Đã nhập'} ${qty} ${s.unit} "${s.name}". Tồn kho hiện tại: ${s.quantity}`, 'success');
+        closeStockAdjustModal();
+        await loadSupplies();
+    } catch (e) {
+        showToast(e.message || 'Lỗi điều chỉnh tồn kho', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> Xác Nhận';
+        }
+    }
+}
+
+// ==================== DELETE SUPPLY ====================
+async function deleteSupply(id, name) {
+    if (!confirm(`Bạn có chắc chắn muốn xóa vật tư "${name}" khỏi hệ thống?\n(Thao tác này chỉ dành cho Admin)`)) {
+        return;
+    }
+
+    try {
+        await api(`/api/supplies/${id}`, { method: 'DELETE' });
+        showToast(`Đã xóa vật tư "${name}"`, 'success');
+        await loadSupplies();
+    } catch (e) {
+        showToast(e.message || 'Lỗi khi xóa vật tư', 'error');
+    }
+}
+
+// ==================== SMART AI INTAKE ====================
+function openSupplyAiModal() {
+    const modal = document.getElementById('supply-ai-modal');
+    if (!modal) return;
+    const txt = document.getElementById('supply-ai-text');
+    if (txt) txt.value = '';
+    modal.classList.remove('hidden');
+}
+
+function closeSupplyAiModal() {
+    const modal = document.getElementById('supply-ai-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function fillSupplyAiPrompt(text) {
+    const txt = document.getElementById('supply-ai-text');
+    if (txt) {
+        txt.value = text;
+        txt.focus();
+    }
+}
+
+async function runSupplyAiParse() {
+    const text = document.getElementById('supply-ai-text').value.trim();
+    if (!text) {
+        showToast('Vui lòng nhập hoặc nói nội dung vật tư', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('btn-run-supply-ai');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> AI đang bóc tách...';
+    }
+
+    try {
+        const res = await api('/api/supplies/ai-parse', {
+            method: 'POST',
+            body: { text }
+        });
+        const parsed = res.data;
+
+        closeSupplyAiModal();
+        openSupplyModal(parsed);
+        showToast('AI đã bóc tách thông tin thành công! Hãy kiểm tra và bấm Lưu', 'success');
+    } catch (e) {
+        showToast(e.message || 'Lỗi bóc tách AI', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> Bóc Tách & Điền Form';
+        }
+    }
+}
+
+// ==================== SUPPLY TRANSACTION HISTORY ====================
+async function openSupplyTransactionsModal(supplyId = null) {
+    const modal = document.getElementById('supply-transactions-modal');
+    const tbody = document.getElementById('supply-transactions-body');
+    if (!modal || !tbody) return;
+
+    modal.classList.remove('hidden');
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="7" class="py-8 text-center text-slate-400">
+                <i class="fa-solid fa-spinner fa-spin text-xl text-teal-600 mb-1"></i>
+                <p>Đang tải lịch sử xuất nhập kho...</p>
+            </td>
+        </tr>
+    `;
+
+    try {
+        const url = supplyId ? `/api/supplies/transactions?supply_id=${supplyId}&limit=50` : '/api/supplies/transactions?limit=50';
+        const trans = await api(url);
+
+        if (!trans || trans.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="py-8 text-center text-slate-400">
+                        Chưa có lịch sử xuất nhập nào được ghi nhận.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = trans.map(t => {
+            const isImport = t.delta > 0;
+            const deltaBadge = isImport ?
+                `<span class="px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800 text-[11px]">+${t.delta}</span>` :
+                `<span class="px-2 py-0.5 rounded-full font-bold bg-rose-100 text-rose-800 text-[11px]">${t.delta}</span>`;
+
+            let actionText = 'Điều chỉnh';
+            let actionBadge = 'bg-slate-100 text-slate-700';
+            if (t.action === 'import') {
+                actionText = 'Nhập kho';
+                actionBadge = 'bg-emerald-100 text-emerald-800 font-bold';
+            } else if (t.action === 'export') {
+                actionText = 'Xuất dùng';
+                actionBadge = 'bg-rose-100 text-rose-800 font-bold';
+            } else if (t.action === 'init') {
+                actionText = 'Tạo mới';
+                actionBadge = 'bg-sky-100 text-sky-800 font-bold';
+            }
+
+            return `
+                <tr class="hover:bg-slate-50 transition">
+                    <td class="py-2.5 px-3 text-slate-500 font-mono text-[11px]">${t.created_at || ''}</td>
+                    <td class="py-2.5 px-3 font-bold text-slate-800">${escapeHtml(t.supply_name || '')}</td>
+                    <td class="py-2.5 px-3 text-center">
+                        <span class="px-2 py-0.5 rounded-md text-[11px] ${actionBadge}">${actionText}</span>
+                    </td>
+                    <td class="py-2.5 px-3 text-center">${deltaBadge}</td>
+                    <td class="py-2.5 px-3 text-center font-mono text-slate-600">${t.quantity_before} &rarr; <b>${t.quantity_after}</b></td>
+                    <td class="py-2.5 px-3 text-slate-600">${escapeHtml(t.reason || '')}</td>
+                    <td class="py-2.5 px-3 text-slate-700 font-medium">${escapeHtml(t.created_by || 'Hệ thống')}</td>
+                </tr>
+            `;
+        }).join('');
+    } catch (e) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" class="py-6 text-center text-rose-500">
+                    Lỗi tải lịch sử: ${escapeHtml(e.message)}
+                </td>
+            </tr>
+        `;
+    }
+}
+
+function closeSupplyTransactionsModal() {
+    const modal = document.getElementById('supply-transactions-modal');
+    if (modal) modal.classList.add('hidden');
 }
