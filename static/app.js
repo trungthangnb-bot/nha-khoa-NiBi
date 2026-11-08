@@ -1344,10 +1344,10 @@ function renderEmrTreatments(treatments) {
             <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
                 <div class="flex items-start justify-between gap-2">
                     <div>
-                        <div class="flex items-center gap-2">
-                            <span class="font-extrabold text-slate-800 text-sm">${escapeHtml(t.procedure)}</span>
+                        <div class="flex items-center flex-wrap gap-2">
+                            <span class="font-black text-rose-600 text-base tracking-wide">${escapeHtml(t.procedure)}</span>
                             <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700">${escapeHtml(t.category)}</span>
-                            ${t.tooth ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">Răng: ${escapeHtml(t.tooth)}</span>` : ''}
+                            ${t.tooth ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">Răng: ${escapeHtml(t.tooth)}</span>` : ''}
                         </div>
                         <p class="text-[11px] text-slate-400 mt-1">
                             📅 Ngày khám: <b>${t.visit_date || 'Không ngày'}</b> • Cơ sở: ${escapeHtml(t.branch)} • Bác sĩ: <b>${escapeHtml(t.dentist || 'Thắng')}</b>
