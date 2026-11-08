@@ -1119,7 +1119,7 @@
     <!-- ================================================================= -->
 
     <!-- 1. PATIENT INTAKE MODAL (NO ENTER SUBMIT + INTEGRATED FIRST TREATMENT) -->
-    <div id="patient-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-3 md:p-4 overflow-y-auto">
+    <div id="patient-modal" class="hidden fixed inset-0 z-[55] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-3 md:p-4 overflow-y-auto">
         <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-100 overflow-hidden my-auto max-h-[92vh] flex flex-col">
             <!-- Modal Header -->
             <div class="bg-gradient-to-r from-teal-600 to-teal-700 px-5 py-4 text-white flex items-center justify-between flex-shrink-0">
@@ -1435,6 +1435,17 @@
                     <div>
                         <span class="text-slate-400 block font-semibold">Tiền sử bệnh lý:</span>
                         <span id="emr-history" class="font-bold text-slate-800 block mt-0.5">--</span>
+                    </div>
+                </div>
+
+                <!-- Patient Notes Banner (Conditional: only shown when notes exist) -->
+                <div id="emr-patient-notes-container" class="hidden bg-amber-50 border border-amber-200/80 rounded-xl p-3.5 text-xs flex items-start gap-3 shadow-sm">
+                    <div class="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <i class="fa-solid fa-note-sticky text-sm"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <span class="text-[10px] font-black uppercase tracking-wider text-amber-800 block mb-1">Ghi chú bệnh nhân:</span>
+                        <p id="emr-patient-notes" class="text-amber-950 font-medium whitespace-pre-line leading-relaxed break-words"></p>
                     </div>
                 </div>
 
@@ -1755,7 +1766,7 @@
     </div>
 
     <!-- 6. PIN PROMPT MODAL (FOR STAFF EDITING) -->
-    <div id="pin-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4">
+    <div id="pin-modal" class="hidden fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4">
         <div class="bg-white w-full max-w-xs rounded-2xl shadow-2xl border border-slate-100 overflow-hidden text-center p-5 space-y-4">
             <div class="w-12 h-12 mx-auto rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xl">
                 <i class="fa-solid fa-shield-halved"></i>
@@ -1775,7 +1786,7 @@
     </div>
 
     <!-- 7. ADMIN PASSWORD CONFIRM MODAL (FOR DELETIONS) -->
-    <div id="admin-pw-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+    <div id="admin-pw-modal" class="hidden fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
         <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl border border-slate-100 overflow-hidden text-center p-6 space-y-4">
             <div class="w-14 h-14 mx-auto rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center text-2xl">
                 <i class="fa-solid fa-triangle-exclamation"></i>
@@ -2406,6 +2417,6 @@
     <div id="toast-container" class="fixed bottom-20 md:bottom-6 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-sm"></div>
 
     <!-- App JavaScript -->
-    <script src="/static/app.js?v=ai1.5-treatment-red"></script>
+    <script src="/static/app.js?v=ai1.6-notes-modal-front"></script>
 </body>
 </html>

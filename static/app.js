@@ -1297,6 +1297,20 @@ async function openPatientDetail(pid) {
         document.getElementById('emr-address').textContent = p.address || 'Chưa cập nhật địa chỉ';
         document.getElementById('emr-history').textContent = p.medical_history || 'Không có tiền sử đặc biệt';
 
+        // Patient notes (only shown if present)
+        const notesContainer = document.getElementById('emr-patient-notes-container');
+        const notesEl = document.getElementById('emr-patient-notes');
+        if (notesContainer && notesEl) {
+            const notes = (p.notes || '').trim();
+            if (notes) {
+                notesEl.textContent = notes;
+                notesContainer.classList.remove('hidden');
+            } else {
+                notesEl.textContent = '';
+                notesContainer.classList.add('hidden');
+            }
+        }
+
         // Totals
         const totals = data.totals || { billed: 0, paid: 0, debt: 0 };
         document.getElementById('emr-total-billed').textContent = formatVND(totals.billed);
