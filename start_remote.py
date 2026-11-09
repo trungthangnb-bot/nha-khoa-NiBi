@@ -155,6 +155,19 @@ def main():
     threading.Thread(target=drain, args=(cf_proc.stdout,), daemon=True).start()
     threading.Thread(target=drain, args=(server_proc.stdout,), daemon=True).start()
 
+    # Keep-Alive thread: Ping Render every 8 minutes so it never goes to sleep
+    def keep_render_alive():
+        import urllib.request
+        render_url = "https://nha-khoa-nibi.onrender.com/api/auth/me"
+        while True:
+            try:
+                time.sleep(480)  # 8 minutes
+                req = urllib.request.Request(render_url, headers={"User-Agent": "NiBi-KeepAlive/1.0"})
+                urllib.request.urlopen(req, timeout=15)
+            except Exception:
+                pass
+    threading.Thread(target=keep_render_alive, daemon=True).start()
+
     # Setup desktop shortcuts & auto-start on Windows boot
     try:
         setup_desktop_and_startup(base_dir)
@@ -164,7 +177,20 @@ def main():
     local_ip = get_local_ip()
     desktop_dir = os.path.join(os.path.expanduser("~"), "Desktop")
 
-    # 4. Generate QR code
+    # 4. Generate QR codes
+    # 4A. Permanent Cloud Link (NEVER CHANGES)
+    perm_url = "https://nha-khoa-nibi.onrender.com"
+    qr_perm = qrcode.QRCode(border=1)
+    qr_perm.add_data(perm_url)
+    qr_perm.make(fit=True)
+    qr_perm_img = qr_perm.make_image(fill_color="black", back_color="white")
+    if os.path.exists(desktop_dir):
+        try:
+            qr_perm_img.save(os.path.join(desktop_dir, "Mã_QR_Link_Cố_Định_Online.png"))
+        except Exception:
+            pass
+
+    # 4B. Temporary Cloudflare Tunnel QR
     qr = qrcode.QRCode(border=1)
     qr.add_data(tunnel_url)
     qr.make(fit=True)
@@ -194,16 +220,20 @@ def main():
         "=" * 68 + "\n"
         "🦷 NHA KHOA NIBI - BS. THẮNG (QUẢN LÝ PHÒNG KHÁM)\n"
         "=" * 68 + "\n\n"
+        "⭐ LINK CỐ ĐỊNH VĨNH VIỄN (KHÔNG BAO GIỜ ĐỔI LINK - DÙNG 4G/5G/INTERNET):\n"
+        f"   👉 https://nha-khoa-nibi.onrender.com\n"
+        "   (Khuyên dùng: Lưu link này vào Bookmark điện thoại hoặc quét ảnh\n"
+        "    'Mã_QR_Link_Cố_Định_Online.png' ngoài Desktop, dùng mãi mãi không lo đổi link!)\n\n"
         "1. KHI Ở PHÒNG KHÁM (CÙNG MẠNG WI-FI PHÒNG KHÁM):\n"
         f"   👉 Link điện thoại / máy tính khác: http://{local_ip}:8000\n"
-        "   (Link này CỐ ĐỊNH, không bao giờ thay đổi khi kết nối Wi-Fi phòng khám)\n\n"
-        "2. KHI Ở NGOÀI HOẶC DÙNG 4G/5G (TRUY CẬP TỪ XA BẤT CỨ ĐÂU):\n"
-        f"   👉 Link từ xa: {tunnel_url}\n"
+        "   (Link này CỐ ĐỊNH, kết nối siêu nhanh trong mạng Wi-Fi phòng)\n\n"
+        "2. LINK DỰ PHÒNG CLOUDFLARE HÔM NAY:\n"
+        f"   👉 Link từ xa hôm nay: {tunnel_url}\n"
         "   (Hoặc quét ảnh 'Mã_QR_Đăng_Nhập_Điện_Thoại.png' ngoài màn hình Desktop)\n\n"
         "3. TRÊN MÁY TÍNH NÀY:\n"
         "   👉 Mở trình duyệt vào: http://localhost:8000\n\n"
         "4. THÔNG TIN ĐĂNG NHẬP:\n"
-        "   🔑 Mật khẩu Admin mở khóa: 123456\n"
+        "   🔑 Mật khẩu Admin: 123456\n"
         "   🛡️  Mã PIN nhân viên sửa đổi hồ sơ: 0000\n"
         "=" * 68 + "\n"
     )
