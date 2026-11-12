@@ -26,12 +26,8 @@ const state = {
 // ==================== UTILITY FUNCTIONS ====================
 function formatVND(val) {
     const num = Number(val) || 0;
-    const inK = num / 1000;
-    if (inK === 0) return '0K';
-    if (inK % 1 === 0) {
-        return new Intl.NumberFormat('vi-VN').format(inK) + 'K';
-    }
-    return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(inK) + 'K';
+    if (num === 0) return '0 đ';
+    return new Intl.NumberFormat('vi-VN').format(num) + ' đ';
 }
 
 function formatMoneyK(val) {
