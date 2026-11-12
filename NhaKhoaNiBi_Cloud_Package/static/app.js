@@ -2166,19 +2166,23 @@ async function loadReports() {
             `;
         }).join('');
 
-        // Breakdown by Categories
+        // Breakdown by Categories (clickable to open patients summary list)
         const catBox = document.getElementById('report-categories-list');
         const maxCat = Math.max(...data.categories.map(c => c.billed), 1);
         catBox.innerHTML = data.categories.map(c => `
-            <div>
-                <div class="flex items-center justify-between text-xs font-semibold mb-1">
-                    <span class="text-slate-700">${c.name} (${c.visits} ca)</span>
+            <button type="button" data-category="${escapeHtml(c.name || '')}" onclick="openCategoryPatientsModal(this.dataset.category)"
+                    class="w-full text-left p-2 -mx-1 rounded-xl hover:bg-teal-50/80 active:bg-teal-100/70 border border-transparent hover:border-teal-200 transition cursor-pointer group block">
+                <div class="flex items-center justify-between text-xs font-semibold mb-1.5">
+                    <span class="text-slate-700 group-hover:text-teal-800 flex items-center gap-1.5">
+                        <span>${escapeHtml(c.name || 'Khác')} (${c.visits} ca)</span>
+                        <i class="fa-solid fa-chevron-right text-[10px] text-teal-500 opacity-70 group-hover:translate-x-0.5 transition"></i>
+                    </span>
                     <span class="text-teal-700 font-bold">${formatVND(c.billed)}</span>
                 </div>
                 <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                    <div style="width: ${Math.round((c.billed / maxCat) * 100)}%" class="bg-teal-500 h-full rounded-full"></div>
+                    <div style="width: ${Math.round((c.billed / maxCat) * 100)}%" class="bg-teal-500 group-hover:bg-teal-600 h-full rounded-full transition-all"></div>
                 </div>
-            </div>
+            </button>
         `).join('');
 
         // Breakdown by Branches
@@ -2198,6 +2202,191 @@ async function loadReports() {
     } catch (e) {
         showToast(e.message, 'error');
     }
+}
+
+// ==================== CATEGORY PATIENTS REPORT POPUP ====================
+let currentCategoryPatientsData = {
+    category: '',
+    year: 0,
+    sortAsc: false,
+    items: [],
+};
+
+async function openCategoryPatientsModal(category) {
+    if (!category) return;
+    const modal = document.getElementById('category-patients-modal');
+    if (!modal) return;
+
+    const yearSelect = document.getElementById('report-year-select');
+    const selectedYear = parseInt(yearSelect ? yearSelect.value : 0, 10) || new Date().getFullYear();
+
+    modal.classList.remove('hidden');
+    document.getElementById('cat-modal-title').textContent = `Bệnh nhân: Nhóm ${category}`;
+    document.getElementById('cat-modal-subtitle').textContent = `Năm ${selectedYear} • Danh sách ca điều trị xếp theo thứ tự ngày`;
+
+    const searchInput = document.getElementById('cat-search-input');
+    if (searchInput) searchInput.value = '';
+
+    currentCategoryPatientsData = {
+        category,
+        year: selectedYear,
+        sortAsc: false,
+        items: [],
+    };
+
+    const sortLabel = document.getElementById('cat-sort-label');
+    if (sortLabel) sortLabel.textContent = 'Mới nhất trước';
+
+    const tbody = document.getElementById('cat-patients-tbody');
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="9" class="py-12 text-center text-slate-400">
+                <i class="fa-solid fa-spinner fa-spin text-teal-600 text-2xl mb-2"></i>
+                <div class="font-medium text-xs">Đang tải danh sách bệnh nhân nhóm "${escapeHtml(category)}"...</div>
+            </td>
+        </tr>
+    `;
+
+    try {
+        const url = `/api/admin/reports/category-patients?category=${encodeURIComponent(category)}&year=${selectedYear}&branch=${encodeURIComponent(state.branchFilter)}&order=desc`;
+        const res = await api(url);
+        currentCategoryPatientsData.items = res.items || [];
+
+        // Update stats
+        const statsBox = document.getElementById('cat-modal-stats');
+        if (statsBox) {
+            statsBox.innerHTML = `
+                <span class="text-slate-600 font-semibold">Tổng: <strong class="text-teal-700">${res.total_visits} ca</strong></span>
+                <span class="text-slate-600 font-semibold hidden sm:inline">Phát sinh: <strong class="text-slate-800">${formatVND(res.total_cost)}</strong></span>
+                <span class="text-slate-600 font-semibold">Đã thu: <strong class="text-emerald-600">${formatVND(res.total_paid)}</strong></span>
+                ${res.total_debt > 0 ? `<span class="text-rose-600 font-bold">Nợ: ${formatVND(res.total_debt)}</span>` : '<span class="text-slate-400 font-medium">Hết nợ</span>'}
+            `;
+        }
+
+        renderCategoryPatientsTable();
+    } catch (e) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" class="py-8 text-center text-rose-500 font-semibold text-xs">
+                    Lỗi tải dữ liệu: ${escapeHtml(e.message)}
+                </td>
+            </tr>
+        `;
+        showToast(e.message, 'error');
+    }
+}
+
+function closeCategoryPatientsModal() {
+    const modal = document.getElementById('category-patients-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function toggleCategoryPatientsSort() {
+    currentCategoryPatientsData.sortAsc = !currentCategoryPatientsData.sortAsc;
+    const sortLabel = document.getElementById('cat-sort-label');
+    const sortBtn = document.getElementById('cat-sort-btn');
+    if (sortLabel) {
+        sortLabel.textContent = currentCategoryPatientsData.sortAsc ? 'Cũ nhất trước' : 'Mới nhất trước';
+    }
+    if (sortBtn) {
+        const icon = sortBtn.querySelector('i');
+        if (icon) {
+            icon.className = currentCategoryPatientsData.sortAsc
+                ? 'fa-solid fa-arrow-up-wide-short text-teal-600'
+                : 'fa-solid fa-arrow-down-wide-short text-teal-600';
+        }
+    }
+    renderCategoryPatientsTable();
+}
+
+function renderCategoryPatientsTable() {
+    const tbody = document.getElementById('cat-patients-tbody');
+    const footerSummary = document.getElementById('cat-footer-summary');
+    if (!tbody) return;
+
+    let items = [...currentCategoryPatientsData.items];
+    const q = (document.getElementById('cat-search-input')?.value || '').trim().toLowerCase();
+
+    if (q) {
+        items = items.filter(it =>
+            (it.patient_name || '').toLowerCase().includes(q) ||
+            (it.patient_phone || '').toLowerCase().includes(q) ||
+            (it.patient_code || '').toLowerCase().includes(q) ||
+            (it.procedure || '').toLowerCase().includes(q) ||
+            (it.dentist || '').toLowerCase().includes(q)
+        );
+    }
+
+    items.sort((a, b) => {
+        const da = a.visit_date || '';
+        const db = b.visit_date || '';
+        if (da !== db) {
+            return currentCategoryPatientsData.sortAsc ? da.localeCompare(db) : db.localeCompare(da);
+        }
+        return currentCategoryPatientsData.sortAsc ? (a.treatment_id - b.treatment_id) : (b.treatment_id - a.treatment_id);
+    });
+
+    if (footerSummary) {
+        footerSummary.textContent = `Hiển thị ${items.length} / ${currentCategoryPatientsData.items.length} ca điều trị • Nhóm ${currentCategoryPatientsData.category}`;
+    }
+
+    if (items.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" class="py-10 text-center text-slate-400">
+                    <i class="fa-regular fa-folder-open text-3xl mb-2 text-slate-300"></i>
+                    <p class="font-medium text-xs">Không có ca điều trị nào phù hợp</p>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = items.map((it, idx) => {
+        const dateStr = it.visit_date ? formatDateVN(it.visit_date) : '<span class="text-slate-400 italic">Chưa rõ</span>';
+        const code = it.patient_code || ('BN' + String(it.patient_id).padStart(5, '0'));
+        const hasDebt = (it.debt || 0) > 0;
+        return `
+            <tr class="hover:bg-teal-50/40 transition">
+                <td class="py-2.5 px-3 text-center text-slate-400 font-medium text-xs">${idx + 1}</td>
+                <td class="py-2.5 px-3 font-semibold text-slate-800 whitespace-nowrap text-xs">
+                    <i class="fa-regular fa-calendar text-teal-600 mr-1 text-[11px]"></i>${dateStr}
+                </td>
+                <td class="py-2.5 px-3">
+                    <button type="button" onclick="openPatientDetail(${it.patient_id})"
+                            class="text-left font-bold text-teal-700 hover:text-teal-900 hover:underline flex items-center gap-1.5 cursor-pointer">
+                        <span>${escapeHtml(it.patient_name || 'Khách vãng lai')}</span>
+                        <span class="text-[10px] font-mono font-medium px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded">${code}</span>
+                    </button>
+                    ${it.patient_phone ? `<div class="text-[11px] text-slate-500 font-mono mt-0.5"><i class="fa-solid fa-phone text-[9px] text-slate-400 mr-1"></i>${escapeHtml(it.patient_phone)}</div>` : ''}
+                </td>
+                <td class="py-2.5 px-3 hidden sm:table-cell">
+                    <div class="font-medium text-slate-800 text-xs">${escapeHtml(it.procedure || '—')}</div>
+                    ${it.tooth ? `<div class="text-[10px] text-teal-600 font-semibold mt-0.5">Vị trí: ${escapeHtml(it.tooth)}</div>` : ''}
+                </td>
+                <td class="py-2.5 px-3 hidden md:table-cell text-xs text-slate-600 font-medium whitespace-nowrap">
+                    ${escapeHtml(it.dentist || '—')}
+                </td>
+                <td class="py-2.5 px-3 text-right font-semibold text-slate-700 whitespace-nowrap text-xs">
+                    ${formatVND(it.cost || 0)}
+                </td>
+                <td class="py-2.5 px-3 text-right font-extrabold text-emerald-600 whitespace-nowrap text-xs">
+                    ${formatVND(it.paid || 0)}
+                </td>
+                <td class="py-2.5 px-3 text-right whitespace-nowrap text-xs ${hasDebt ? 'font-bold text-rose-600' : 'text-slate-400'}">
+                    ${hasDebt ? `+${formatVND(it.debt)}` : '0K'}
+                </td>
+                <td class="py-2.5 px-3 text-center">
+                    <button type="button" onclick="openPatientDetail(${it.patient_id})"
+                            class="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 font-bold rounded-lg text-xs transition inline-flex items-center gap-1 cursor-pointer"
+                            title="Mở hồ sơ bệnh nhân">
+                        <i class="fa-regular fa-folder-open text-[11px]"></i>
+                        <span>Xem</span>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
 }
 
 // ==================== AUDIT TAB (ADMIN ONLY) ====================

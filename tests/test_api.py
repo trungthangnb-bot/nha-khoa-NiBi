@@ -617,6 +617,38 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(d["unit_price"], 400000)
         self.assertEqual(d["supplier"], "Hà Nội")
 
+    def test_82_report_category_patients(self):
+        p1 = self.new_patient("BN A Test82", phone="0988111881")
+        p2 = self.new_patient("BN B Test82", phone="0988222882")
+        t1 = self.c.post(f"/api/patients/{p1['id']}/treatments", json={
+            "visit_date": "2025-03-10", "branch": "Ninh Vân",
+            "category": "Chỉnh nha", "procedure": "Niềng răng mắc cài", "cost": 20000000, "paid": 5000000
+        }, headers=self.staff)
+        self.assertEqual(t1.status_code, 200, t1.text)
+        t2 = self.c.post(f"/api/patients/{p2['id']}/treatments", json={
+            "visit_date": "2025-05-15", "branch": "Ninh Vân",
+            "category": "Chỉnh nha", "procedure": "Niềng răng trong suốt", "cost": 3500000, "paid": 3500000
+        }, headers=self.staff)
+        self.assertEqual(t2.status_code, 200, t2.text)
+
+        # Staff forbidden
+        self.assertEqual(self.c.get("/api/admin/reports/category-patients?category=Chỉnh nha&year=2025", headers=self.staff).status_code, 403)
+
+        # Admin desc order (newest first)
+        res_desc = self.c.get("/api/admin/reports/category-patients?category=Chỉnh nha&year=2025&order=desc", headers=self.admin)
+        self.assertEqual(res_desc.status_code, 200)
+        d_desc = res_desc.json()
+        self.assertEqual(d_desc["total_visits"], 2)
+        self.assertEqual(d_desc["total_cost"], 23500000)
+        self.assertEqual(d_desc["total_paid"], 8500000)
+        self.assertEqual(d_desc["total_debt"], 15000000)
+        self.assertEqual([i["patient_name"] for i in d_desc["items"]], ["BN B Test82", "BN A Test82"])
+
+        # Admin asc order (oldest first)
+        res_asc = self.c.get("/api/admin/reports/category-patients?category=Chỉnh nha&year=2025&order=asc", headers=self.admin)
+        self.assertEqual(res_asc.status_code, 200)
+        self.assertEqual([i["patient_name"] for i in res_asc.json()["items"]], ["BN A Test82", "BN B Test82"])
+
     def test_99_logout_invalidates_token(self):
         h = self.login("letan", "abc123")
         self.assertEqual(self.c.post("/api/auth/logout", headers=h).status_code, 200)

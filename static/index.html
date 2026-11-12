@@ -760,8 +760,11 @@
                     <!-- Breakdown by Category & Branch -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                            <h4 class="font-bold text-slate-800 text-sm mb-3">Doanh số theo nhóm dịch vụ</h4>
-                            <div id="report-categories-list" class="space-y-3"></div>
+                            <div class="flex items-center justify-between gap-2 mb-3">
+                                <h4 class="font-bold text-slate-800 text-sm">Doanh số theo nhóm dịch vụ</h4>
+                                <span class="text-[11px] text-teal-600 font-semibold">Bấm để xem DS bệnh nhân</span>
+                            </div>
+                            <div id="report-categories-list" class="space-y-2"></div>
                         </div>
                         <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                             <h4 class="font-bold text-slate-800 text-sm mb-3">Doanh số theo cơ sở phòng khám</h4>
@@ -2043,6 +2046,78 @@
         </div>
     </div>
 
+    <!-- 12b. REPORT CATEGORY PATIENTS MODAL -->
+    <div id="category-patients-modal" class="hidden fixed inset-0 z-[38] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-2 md:p-4">
+        <div class="bg-white w-full max-w-5xl rounded-2xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[92vh]">
+            <!-- Modal Header -->
+            <div class="bg-gradient-to-r from-teal-700 via-teal-800 to-slate-900 px-5 py-4 text-white flex items-center justify-between flex-shrink-0 border-b border-teal-500/20">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-teal-500/20 border border-teal-400/40 text-teal-200 flex items-center justify-center text-lg shadow-inner">
+                        <i class="fa-solid fa-tooth"></i>
+                    </div>
+                    <div>
+                        <h3 id="cat-modal-title" class="font-extrabold text-base text-white">Danh sách bệnh nhân theo dịch vụ</h3>
+                        <p id="cat-modal-subtitle" class="text-xs text-teal-100/80 mt-0.5">Xếp theo thứ tự ngày điều trị</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeCategoryPatientsModal()" class="text-white/80 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Controls bar -->
+            <div class="bg-slate-50 border-b border-slate-200 px-4 md:px-5 py-3 flex flex-wrap items-center justify-between gap-2.5 flex-shrink-0 text-xs">
+                <div class="flex items-center gap-2 flex-wrap flex-1 min-w-[200px]">
+                    <div class="relative flex-1 max-w-xs">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[11px]"></i>
+                        <input type="text" id="cat-search-input" oninput="renderCategoryPatientsTable()"
+                               placeholder="Tìm tên BN, SĐT, nội dung điều trị..."
+                               class="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs focus:outline-none focus:border-teal-500">
+                    </div>
+                    <button type="button" id="cat-sort-btn" onclick="toggleCategoryPatientsSort()"
+                            class="px-3 py-1.5 bg-white hover:bg-teal-50 text-slate-700 hover:text-teal-700 font-bold border border-slate-300 rounded-xl transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-arrow-down-wide-short text-teal-600"></i>
+                        <span id="cat-sort-label">Mới nhất trước</span>
+                    </button>
+                </div>
+                <div id="cat-modal-stats" class="flex items-center gap-3 flex-wrap text-xs font-bold">
+                    <!-- Dynamic stats -->
+                </div>
+            </div>
+
+            <!-- Table Container -->
+            <div class="overflow-auto custom-scrollbar flex-1 bg-white">
+                <table class="w-full text-left border-collapse text-xs md:text-sm">
+                    <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-[11px] border-b border-slate-200 sticky top-0 z-10">
+                        <tr>
+                            <th class="py-2.5 px-3 text-center w-10">#</th>
+                            <th class="py-2.5 px-3 whitespace-nowrap">Ngày điều trị</th>
+                            <th class="py-2.5 px-3">Bệnh nhân</th>
+                            <th class="py-2.5 px-3 hidden sm:table-cell">Nội dung điều trị</th>
+                            <th class="py-2.5 px-3 hidden md:table-cell">Bác sĩ</th>
+                            <th class="py-2.5 px-3 text-right whitespace-nowrap">Chi phí</th>
+                            <th class="py-2.5 px-3 text-right whitespace-nowrap">Đã thu</th>
+                            <th class="py-2.5 px-3 text-right whitespace-nowrap">Còn nợ</th>
+                            <th class="py-2.5 px-3 text-center w-16">Hồ sơ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cat-patients-tbody" class="divide-y divide-slate-100">
+                        <!-- Dynamically populated -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="bg-slate-50 border-t border-slate-200 px-5 py-3 flex items-center justify-between flex-shrink-0">
+                <span id="cat-footer-summary" class="text-xs text-slate-500 font-medium">Đang tải...</span>
+                <button type="button" onclick="closeCategoryPatientsModal()"
+                        class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xl text-xs transition">
+                    Đóng
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- 13. FLOATING AI ASSISTANT CHATBOT & TOGGLE BUTTON -->
     <div id="ai-chat-drawer" class="hidden fixed bottom-20 md:bottom-24 right-4 md:right-6 z-40 w-[calc(100vw-2rem)] sm:w-96 max-h-[82vh] h-[520px] bg-white rounded-2xl shadow-2xl border border-indigo-100 flex flex-col overflow-hidden transition-all duration-300 transform scale-95 origin-bottom-right">
         <!-- Header -->
@@ -2429,6 +2504,6 @@
     <div id="toast-container" class="fixed bottom-20 md:bottom-6 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-sm"></div>
 
     <!-- App JavaScript -->
-    <script src="/static/app.js?v=ai1.8-chart-reports"></script>
+    <script src="/static/app.js?v=ai1.9-cat-patients"></script>
 </body>
 </html>

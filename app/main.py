@@ -1149,6 +1149,43 @@ def reports(year: int = 0, branch: str = "", user=Depends(admin_only)):
             "undated_collected": undated, "years": years or [year]}
 
 
+@app.get("/api/admin/reports/category-patients")
+def report_category_patients(category: str, year: int = 0, branch: str = "", order: str = "desc", user=Depends(admin_only)):
+    year = year or dt.date.today().year
+    bw, bp = ("AND t.branch=?", [branch]) if branch else ("", [])
+    sort_dir = "ASC" if order.lower() == "asc" else "DESC"
+    with db() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT t.id AS treatment_id, t.patient_id, p.code AS patient_code, p.name AS patient_name,
+                   p.phone AS patient_phone, t.visit_date, t.branch, t.category, t.dentist,
+                   t.procedure, t.tooth, t.cost,
+                   COALESCE((SELECT SUM(pay.amount) FROM payments pay WHERE pay.treatment_id = t.id), 0) AS paid
+            FROM treatments t
+            JOIN patients p ON p.id = t.patient_id
+            WHERE t.category = ? AND substr(t.visit_date, 1, 4) = ? {bw}
+            ORDER BY t.visit_date {sort_dir}, t.id {sort_dir}
+            """,
+            [category, str(year)] + bp
+        ).fetchall()
+    items = []
+    for r in rows:
+        d = dict(r)
+        d["debt"] = max(0, (d["cost"] or 0) - (d["paid"] or 0))
+        items.append(d)
+    return {
+        "category": category,
+        "year": year,
+        "branch": branch,
+        "order": sort_dir.lower(),
+        "total_visits": len(items),
+        "total_cost": sum(i["cost"] or 0 for i in items),
+        "total_paid": sum(i["paid"] or 0 for i in items),
+        "total_debt": sum(i["debt"] for i in items),
+        "items": items,
+    }
+
+
 @app.get("/api/admin/audit")
 def audit_list(scope: str = "changes", limit: int = 100, offset: int = 0, user=Depends(admin_only)):
     sensitive = ("patient_edit", "patient_delete", "treatment_edit", "treatment_delete", "payment_delete",
