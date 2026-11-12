@@ -1421,7 +1421,17 @@ function renderEmrTreatments(treatments) {
                     </div>
                 ` : ''}
 
-                ${t.notes ? `<p class="text-xs text-slate-500 italic mt-1 bg-amber-50/60 p-2 rounded">Ghi chú: ${escapeHtml(t.notes)}</p>` : ''}
+                ${t.notes ? `
+                    <div class="bg-amber-50 border border-amber-300/80 rounded-xl p-3 text-xs flex items-start gap-2.5 shadow-sm mt-2">
+                        <div class="w-6 h-6 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <i class="fa-solid fa-note-sticky text-xs"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <span class="text-[10px] font-black uppercase tracking-wider text-amber-800 block mb-0.5">Ghi chú đợt điều trị:</span>
+                            <p class="text-amber-950 font-bold whitespace-pre-line leading-relaxed break-words">${escapeHtml(t.notes)}</p>
+                        </div>
+                    </div>
+                ` : ''}
             </div>
         `;
     }).join('');
