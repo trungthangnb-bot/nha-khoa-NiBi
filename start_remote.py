@@ -108,15 +108,17 @@ def main():
 
     # 2. Start Uvicorn backend
     print("⏳ Đang khởi động FastAPI trên cổng 8000...")
-    server_proc = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "app.main:app", "--port", "8000", "--host", "0.0.0.0", "--reload"],
-        cwd=base_dir,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        encoding="utf-8",
-        errors="replace"
-    )
+    def start_fastapi():
+        return subprocess.Popen(
+            [sys.executable, "-m", "uvicorn", "app.main:app", "--port", "8000", "--host", "0.0.0.0"],
+            cwd=base_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace"
+        )
+    server_proc = start_fastapi()
     time.sleep(2)
 
     # 3. Launch cloudflared tunnel
@@ -258,13 +260,14 @@ def main():
     print("🔑 Mật khẩu Admin: 123456 | PIN sửa đổi: 0000")
     print("=" * 70 + "\n")
 
-    # Keep alive
+    # Keep alive with auto-healing
     try:
         while True:
             time.sleep(2)
             if server_proc.poll() is not None:
-                print("Server stopped, return code:", server_proc.returncode)
-                break
+                print("⚠️ FastAPI gặp sự cố, tự động khởi động lại...")
+                server_proc = start_fastapi()
+                threading.Thread(target=drain, args=(server_proc.stdout,), daemon=True).start()
     except KeyboardInterrupt:
         print("\nĐang tắt hệ thống...")
     finally:
