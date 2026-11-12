@@ -2460,46 +2460,40 @@ async function openMonthReconciliationModal(month) {
 
         // Update Summary Cards
         const s = currentReconData.summary;
-        document.getElementById('recon-card-billed').textContent = formatVND(s.total_billed || 0);
-        document.getElementById('recon-card-paid-now').textContent = formatVND(s.paid_for_month_treatments || 0);
-        document.getElementById('recon-card-unpaid').textContent = formatVND(s.unpaid_month_debt || 0);
+        const billed = s.total_billed || 0;
+        const collected = s.total_collected || 0;
+        const diff = s.diff || 0;
+        const pct = billed > 0 ? Math.round((collected / billed) * 100) : 100;
+
+        document.getElementById('recon-card-billed').textContent = formatVND(billed);
+        document.getElementById('recon-card-paid-now').textContent = formatVND(collected);
+        document.getElementById('recon-card-unpaid').textContent = formatVND(diff);
         document.getElementById('recon-card-unpaid-sub').textContent = `${s.unpaid_count || 0} bệnh nhân còn nợ`;
-        document.getElementById('recon-card-collected').textContent = formatVND(s.total_collected || 0);
-        document.getElementById('recon-card-collected-sub').textContent = `Thu mới: ${formatVND(s.paid_for_month_treatments || 0)} + Thu nợ cũ: ${formatVND(s.collected_from_old_debt || 0)}`;
+        document.getElementById('recon-card-collected').textContent = `${pct}%`;
+        document.getElementById('recon-card-collected-sub').textContent = `Đã thu ${formatVND(collected)} / ${formatVND(billed)}`;
 
         // Formula banner
         const formulaBanner = document.getElementById('recon-formula-banner');
         if (formulaBanner) {
-            const diff = s.diff || 0;
             if (diff > 0) {
                 formulaBanner.innerHTML = `
                     <div class="flex items-center gap-2 text-rose-700 font-bold">
                         <i class="fa-solid fa-triangle-exclamation"></i>
-                        <span>Nguyên nhân chênh lệch tồn nợ tháng: <strong>+${formatVND(diff)}</strong></span>
+                        <span>Tồn nợ chưa thu của các ca trong tháng: <strong>+${formatVND(diff)}</strong></span>
                     </div>
                     <div class="text-[11px] text-slate-600">
-                        = Phát sinh <strong>${formatVND(s.total_billed)}</strong> - Thực thu <strong>${formatVND(s.total_collected)}</strong>
-                        (Trong đó có <strong>${s.unpaid_count} ca</strong> bệnh nhân chưa thanh toán hết <strong>${formatVND(s.unpaid_month_debt)}</strong>).
-                    </div>
-                `;
-            } else if (diff < 0) {
-                formulaBanner.innerHTML = `
-                    <div class="flex items-center gap-2 text-teal-700 font-bold">
-                        <i class="fa-solid fa-circle-check"></i>
-                        <span>Thực thu tháng cao hơn phát sinh điều trị: <strong>+${formatVND(Math.abs(diff))}</strong></span>
-                    </div>
-                    <div class="text-[11px] text-slate-600">
-                        Do trong tháng có thu thêm <strong>${formatVND(s.collected_from_old_debt)}</strong> từ các đợt nợ cũ của các tháng trước.
+                        = Phát sinh điều trị <strong>${formatVND(billed)}</strong> - Đã thu <strong>${formatVND(collected)}</strong>
+                        (Khớp đúng <strong>${s.unpaid_count} bệnh nhân</strong> còn nợ liệt kê bên dưới).
                     </div>
                 `;
             } else {
                 formulaBanner.innerHTML = `
                     <div class="flex items-center gap-2 text-emerald-700 font-bold">
                         <i class="fa-solid fa-circle-check"></i>
-                        <span>Tháng này đã thu đủ 100% (Không phát sinh nợ đọng mới)</span>
+                        <span>Tháng này đã thu đủ 100% chi phí điều trị (Không có tồn nợ)</span>
                     </div>
                     <div class="text-[11px] text-slate-500">
-                        Phát sinh điều trị = Thực thu vào quỹ (${formatVND(s.total_billed)}).
+                        Tổng phát sinh = Tổng thực thu (${formatVND(billed)}).
                     </div>
                 `;
             }

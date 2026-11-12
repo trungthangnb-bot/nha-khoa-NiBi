@@ -972,11 +972,14 @@ def month_keys(n=12):
 
 
 def revenue_blocks(conn, branch, since, until):
-    """Return collected (payments) and billed (treatment cost) grouped by month between ISO dates."""
+    """Return collected (payments) and billed (treatment cost) grouped by month between ISO dates.
+    Tiền thu được gắn trực tiếp vào tháng phát sinh ca điều trị (t.visit_date), giúp đối soát
+    doanh thu và tồn nợ từng tháng luôn khớp 100% với danh sách bệnh nhân điều trị trong tháng đó.
+    """
     bw, bp = ("AND t.branch=?", [branch]) if branch else ("", [])
     collected = {r[0]: r[1] for r in conn.execute(
-        f"SELECT substr(pay.paid_on,1,7), SUM(pay.amount) FROM payments pay JOIN treatments t ON t.id=pay.treatment_id "
-        f"WHERE pay.paid_on BETWEEN ? AND ? {bw} GROUP BY 1", [since, until] + bp)}
+        f"SELECT substr(t.visit_date,1,7), SUM(pay.amount) FROM payments pay JOIN treatments t ON t.id=pay.treatment_id "
+        f"WHERE t.visit_date BETWEEN ? AND ? {bw} GROUP BY 1", [since, until] + bp)}
     billed = {r[0]: (r[1], r[2]) for r in conn.execute(
         f"SELECT substr(t.visit_date,1,7), SUM(t.cost), COUNT(*) FROM treatments t "
         f"WHERE t.visit_date BETWEEN ? AND ? {bw} GROUP BY 1", [since, until] + bp)}
@@ -1228,13 +1231,13 @@ def report_month_reconciliation(month: str, branch: str = "", user=Depends(admin
     treatments = []
     unpaid_treatments = []
     total_billed = 0
-    total_paid_in_month_for_this = 0
+    total_paid_for_month_treatments = 0
 
     for r in treat_rows:
         d = dict(r)
         d["debt"] = max(0, (d["cost"] or 0) - (d["total_paid"] or 0))
         total_billed += d["cost"] or 0
-        total_paid_in_month_for_this += d["paid_in_month"] or 0
+        total_paid_for_month_treatments += d["total_paid"] or 0
         treatments.append(d)
         if d["debt"] > 0:
             unpaid_treatments.append(d)
@@ -1242,7 +1245,7 @@ def report_month_reconciliation(month: str, branch: str = "", user=Depends(admin
     old_debt_collections = [dict(r) for r in old_pay_rows]
     total_old_debt_collected = sum(p["amount"] or 0 for p in old_debt_collections)
 
-    total_collected = total_paid_in_month_for_this + total_old_debt_collected
+    total_collected = total_paid_for_month_treatments
     diff = total_billed - total_collected
 
     return {
@@ -1252,8 +1255,8 @@ def report_month_reconciliation(month: str, branch: str = "", user=Depends(admin
             "total_billed": total_billed,
             "total_collected": total_collected,
             "diff": diff,
-            "paid_for_month_treatments": total_paid_in_month_for_this,
-            "unpaid_month_debt": total_billed - total_paid_in_month_for_this,
+            "paid_for_month_treatments": total_paid_for_month_treatments,
+            "unpaid_month_debt": diff,
             "collected_from_old_debt": total_old_debt_collected,
             "unpaid_count": len(unpaid_treatments),
             "old_debt_count": len(old_debt_collections),
