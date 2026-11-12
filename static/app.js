@@ -753,8 +753,21 @@ function selectChartMonth(idx) {
                 <span class="font-extrabold text-teal-600 text-sm">${formatVND(s.collected)}</span>
             </div>
             <div>
-                <span class="text-slate-400 text-[10px] font-bold uppercase block">Chênh lệch / Tồn nợ</span>
-                <span class="font-extrabold ${diff > 0 ? 'text-rose-600' : 'text-emerald-600'} text-sm">${diff > 0 ? formatVND(diff) : 'Thu đủ 100%'}</span>
+                <button type="button" onclick="openMonthReconciliationModal('${s.month}')"
+                        class="group/recon text-left p-1.5 -m-1.5 rounded-xl hover:bg-rose-50/80 active:bg-rose-100/70 border border-transparent hover:border-rose-200 transition cursor-pointer"
+                        title="Bấm để xem giải trình chênh lệch và danh sách bệnh nhân còn nợ trong tháng">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-slate-400 group-hover/recon:text-rose-600 text-[10px] font-bold uppercase block transition">Chênh lệch / Tồn nợ</span>
+                        <i class="fa-solid fa-circle-question text-[11px] text-rose-500 opacity-80 group-hover/recon:scale-110 transition"></i>
+                    </div>
+                    <div class="flex items-center gap-1.5 mt-0.5">
+                        <span class="font-extrabold ${diff > 0 ? 'text-rose-600' : 'text-emerald-600'} text-sm">${diff > 0 ? formatVND(diff) : 'Thu đủ 100%'}</span>
+                        <span class="text-[11px] font-bold text-teal-700 bg-teal-50 group-hover/recon:bg-teal-100 border border-teal-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition">
+                            <span>Đối soát</span>
+                            <i class="fa-solid fa-arrow-right text-[9px]"></i>
+                        </span>
+                    </div>
+                </button>
             </div>
         </div>
     `;
@@ -2159,8 +2172,13 @@ async function loadReports() {
                     <td class="py-3 px-4 text-right font-medium">${m.visits}</td>
                     <td class="py-3 px-4 text-right font-semibold text-slate-700">${formatVND(m.billed)}</td>
                     <td class="py-3 px-4 text-right font-extrabold text-emerald-600">${formatVND(m.collected)}</td>
-                    <td class="py-3 px-4 text-right text-xs ${diff > 0 ? 'text-rose-600 font-bold' : 'text-slate-400'}">
-                        ${diff > 0 ? `+${formatVND(diff)}` : '0K'}
+                    <td class="py-3 px-4 text-right text-xs">
+                        <button type="button" onclick="openMonthReconciliationModal('${m.month}')"
+                                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-rose-50 hover:border-rose-200 border border-transparent transition cursor-pointer font-bold ${diff > 0 ? 'text-rose-600 bg-rose-50/50' : 'text-slate-500'}"
+                                title="Bấm để xem giải trình đối soát chênh lệch và danh sách bệnh nhân còn nợ tháng ${m.month}">
+                            <span>${diff > 0 ? `+${formatVND(diff)}` : '0K'}</span>
+                            <i class="fa-solid fa-scale-balanced text-[10px] text-rose-500 opacity-70"></i>
+                        </button>
                     </td>
                 </tr>
             `;
@@ -2380,6 +2398,338 @@ function renderCategoryPatientsTable() {
                     <button type="button" onclick="openPatientDetail(${it.patient_id})"
                             class="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 font-bold rounded-lg text-xs transition inline-flex items-center gap-1 cursor-pointer"
                             title="Mở hồ sơ bệnh nhân">
+                        <i class="fa-regular fa-folder-open text-[11px]"></i>
+                        <span>Xem</span>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// ==================== MONTH RECONCILIATION & DEBT EXPLANATION ====================
+let currentReconData = {
+    month: '',
+    tab: 'unpaid', // 'unpaid' | 'all' | 'old'
+    summary: {},
+    unpaid_treatments: [],
+    all_treatments: [],
+    old_debt_collections: [],
+};
+
+async function openMonthReconciliationModal(month) {
+    if (!month) return;
+    const modal = document.getElementById('month-reconciliation-modal');
+    if (!modal) return;
+
+    modal.classList.remove('hidden');
+
+    const parts = month.split('-');
+    const monthTitle = `${parts[1]}/${parts[0]}`;
+    document.getElementById('recon-modal-title').textContent = `Đối Soát & Giải Trình Chênh Lệch Tồn Nợ Tháng ${monthTitle}`;
+    document.getElementById('recon-modal-subtitle').textContent = `Chi tiết các ca điều trị phát sinh nợ & nguồn chênh lệch tài chính tháng ${monthTitle}`;
+
+    const searchInput = document.getElementById('recon-search-input');
+    if (searchInput) searchInput.value = '';
+
+    currentReconData = {
+        month,
+        tab: 'unpaid',
+        summary: {},
+        unpaid_treatments: [],
+        all_treatments: [],
+        old_debt_collections: [],
+    };
+
+    updateReconTabStyles('unpaid');
+
+    const tbody = document.getElementById('recon-table-tbody');
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="9" class="py-12 text-center text-slate-400">
+                <i class="fa-solid fa-spinner fa-spin text-rose-600 text-2xl mb-2"></i>
+                <div class="font-medium text-xs">Đang đối soát dữ liệu tháng ${monthTitle}...</div>
+            </td>
+        </tr>
+    `;
+
+    try {
+        const url = `/api/admin/reports/month-reconciliation?month=${encodeURIComponent(month)}&branch=${encodeURIComponent(state.branchFilter)}`;
+        const res = await api(url);
+
+        currentReconData.summary = res.summary || {};
+        currentReconData.unpaid_treatments = res.unpaid_treatments || [];
+        currentReconData.all_treatments = res.all_treatments || [];
+        currentReconData.old_debt_collections = res.old_debt_collections || [];
+
+        // Update Summary Cards
+        const s = currentReconData.summary;
+        document.getElementById('recon-card-billed').textContent = formatVND(s.total_billed || 0);
+        document.getElementById('recon-card-paid-now').textContent = formatVND(s.paid_for_month_treatments || 0);
+        document.getElementById('recon-card-unpaid').textContent = formatVND(s.unpaid_month_debt || 0);
+        document.getElementById('recon-card-unpaid-sub').textContent = `${s.unpaid_count || 0} bệnh nhân còn nợ`;
+        document.getElementById('recon-card-collected').textContent = formatVND(s.total_collected || 0);
+        document.getElementById('recon-card-collected-sub').textContent = `Thu mới: ${formatVND(s.paid_for_month_treatments || 0)} + Thu nợ cũ: ${formatVND(s.collected_from_old_debt || 0)}`;
+
+        // Formula banner
+        const formulaBanner = document.getElementById('recon-formula-banner');
+        if (formulaBanner) {
+            const diff = s.diff || 0;
+            if (diff > 0) {
+                formulaBanner.innerHTML = `
+                    <div class="flex items-center gap-2 text-rose-700 font-bold">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span>Nguyên nhân chênh lệch tồn nợ tháng: <strong>+${formatVND(diff)}</strong></span>
+                    </div>
+                    <div class="text-[11px] text-slate-600">
+                        = Phát sinh <strong>${formatVND(s.total_billed)}</strong> - Thực thu <strong>${formatVND(s.total_collected)}</strong>
+                        (Trong đó có <strong>${s.unpaid_count} ca</strong> bệnh nhân chưa thanh toán hết <strong>${formatVND(s.unpaid_month_debt)}</strong>).
+                    </div>
+                `;
+            } else if (diff < 0) {
+                formulaBanner.innerHTML = `
+                    <div class="flex items-center gap-2 text-teal-700 font-bold">
+                        <i class="fa-solid fa-circle-check"></i>
+                        <span>Thực thu tháng cao hơn phát sinh điều trị: <strong>+${formatVND(Math.abs(diff))}</strong></span>
+                    </div>
+                    <div class="text-[11px] text-slate-600">
+                        Do trong tháng có thu thêm <strong>${formatVND(s.collected_from_old_debt)}</strong> từ các đợt nợ cũ của các tháng trước.
+                    </div>
+                `;
+            } else {
+                formulaBanner.innerHTML = `
+                    <div class="flex items-center gap-2 text-emerald-700 font-bold">
+                        <i class="fa-solid fa-circle-check"></i>
+                        <span>Tháng này đã thu đủ 100% (Không phát sinh nợ đọng mới)</span>
+                    </div>
+                    <div class="text-[11px] text-slate-500">
+                        Phát sinh điều trị = Thực thu vào quỹ (${formatVND(s.total_billed)}).
+                    </div>
+                `;
+            }
+        }
+
+        // Badges
+        document.getElementById('recon-badge-unpaid').textContent = currentReconData.unpaid_treatments.length;
+        document.getElementById('recon-badge-all').textContent = currentReconData.all_treatments.length;
+        document.getElementById('recon-badge-old').textContent = currentReconData.old_debt_collections.length;
+
+        // Auto-select unpaid tab if there are debtors, else all
+        const initialTab = currentReconData.unpaid_treatments.length > 0 ? 'unpaid' : 'all';
+        switchReconTab(initialTab);
+    } catch (e) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" class="py-8 text-center text-rose-500 font-semibold text-xs">
+                    Lỗi đối soát dữ liệu: ${escapeHtml(e.message)}
+                </td>
+            </tr>
+        `;
+        showToast(e.message, 'error');
+    }
+}
+
+function closeMonthReconciliationModal() {
+    const modal = document.getElementById('month-reconciliation-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function switchReconTab(tab) {
+    currentReconData.tab = tab;
+    updateReconTabStyles(tab);
+    renderReconciliationTable();
+}
+
+function updateReconTabStyles(activeTab) {
+    const tabs = ['unpaid', 'all', 'old'];
+    tabs.forEach(t => {
+        const btn = document.getElementById(`recon-tab-${t}`);
+        if (!btn) return;
+        if (t === activeTab) {
+            btn.className = 'px-3 py-1.5 rounded-lg font-bold text-xs transition bg-white text-rose-700 shadow-sm';
+        } else {
+            btn.className = 'px-3 py-1.5 rounded-lg font-bold text-xs transition text-slate-600 hover:text-slate-900';
+        }
+    });
+
+    const theadRow = document.getElementById('recon-table-header');
+    if (theadRow) {
+        if (activeTab === 'old') {
+            theadRow.innerHTML = `
+                <th class="py-2.5 px-3 text-center w-10">#</th>
+                <th class="py-2.5 px-3 whitespace-nowrap">Ngày thu tiền</th>
+                <th class="py-2.5 px-3">Bệnh nhân</th>
+                <th class="py-2.5 px-3 hidden sm:table-cell">Thủ thuật / Đợt khám cũ</th>
+                <th class="py-2.5 px-3 hidden md:table-cell">Ngày khám gốc</th>
+                <th class="py-2.5 px-3 text-right whitespace-nowrap">Tổng chi phí</th>
+                <th class="py-2.5 px-3 text-right whitespace-nowrap">Số tiền thu nợ</th>
+                <th class="py-2.5 px-3 text-center w-20">Hồ sơ</th>
+            `;
+        } else {
+            theadRow.innerHTML = `
+                <th class="py-2.5 px-3 text-center w-10">#</th>
+                <th class="py-2.5 px-3 whitespace-nowrap">Ngày khám</th>
+                <th class="py-2.5 px-3">Bệnh nhân</th>
+                <th class="py-2.5 px-3 hidden sm:table-cell">Nội dung điều trị</th>
+                <th class="py-2.5 px-3 hidden md:table-cell">Bác sĩ</th>
+                <th class="py-2.5 px-3 text-right whitespace-nowrap">Chi phí</th>
+                <th class="py-2.5 px-3 text-right whitespace-nowrap">Đã đóng</th>
+                <th class="py-2.5 px-3 text-right whitespace-nowrap">Còn nợ</th>
+                <th class="py-2.5 px-3 text-center w-20">Hồ sơ</th>
+            `;
+        }
+    }
+}
+
+function renderReconciliationTable() {
+    const tbody = document.getElementById('recon-table-tbody');
+    const footerSummary = document.getElementById('recon-footer-summary');
+    if (!tbody) return;
+
+    const q = (document.getElementById('recon-search-input')?.value || '').trim().toLowerCase();
+
+    if (currentReconData.tab === 'old') {
+        let items = [...currentReconData.old_debt_collections];
+        if (q) {
+            items = items.filter(it =>
+                (it.patient_name || '').toLowerCase().includes(q) ||
+                (it.patient_phone || '').toLowerCase().includes(q) ||
+                (it.patient_code || '').toLowerCase().includes(q) ||
+                (it.procedure || '').toLowerCase().includes(q)
+            );
+        }
+
+        if (footerSummary) {
+            footerSummary.textContent = `Hiển thị ${items.length} / ${currentReconData.old_debt_collections.length} khoản thu nợ cũ trong tháng`;
+        }
+
+        if (items.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="8" class="py-10 text-center text-slate-400">
+                        <i class="fa-regular fa-folder-open text-3xl mb-2 text-slate-300"></i>
+                        <p class="font-medium text-xs">Tháng này không có khoản thu nợ cũ nào từ các tháng trước</p>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = items.map((it, idx) => {
+            const payDate = it.paid_on ? formatDateVN(it.paid_on) : '—';
+            const treatDate = it.treatment_date ? formatDateVN(it.treatment_date) : 'Chưa rõ';
+            const code = it.patient_code || ('BN' + String(it.patient_id).padStart(5, '0'));
+            return `
+                <tr class="hover:bg-slate-50 transition">
+                    <td class="py-2.5 px-3 text-center text-slate-400 font-medium text-xs">${idx + 1}</td>
+                    <td class="py-2.5 px-3 font-semibold text-slate-800 whitespace-nowrap text-xs">
+                        <i class="fa-regular fa-calendar-check text-emerald-600 mr-1 text-[11px]"></i>${payDate}
+                    </td>
+                    <td class="py-2.5 px-3">
+                        <button type="button" onclick="openPatientDetail(${it.patient_id})"
+                                class="text-left font-bold text-teal-700 hover:text-teal-900 hover:underline flex items-center gap-1.5 cursor-pointer">
+                            <span>${escapeHtml(it.patient_name || 'Khách vãng lai')}</span>
+                            <span class="text-[10px] font-mono font-medium px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded">${code}</span>
+                        </button>
+                        ${it.patient_phone ? `<div class="text-[11px] text-slate-500 font-mono mt-0.5"><i class="fa-solid fa-phone text-[9px] text-slate-400 mr-1"></i>${escapeHtml(it.patient_phone)}</div>` : ''}
+                    </td>
+                    <td class="py-2.5 px-3 hidden sm:table-cell text-xs font-medium text-slate-800">
+                        ${escapeHtml(it.procedure || '—')}
+                    </td>
+                    <td class="py-2.5 px-3 hidden md:table-cell text-xs text-slate-500 whitespace-nowrap">
+                        ${treatDate}
+                    </td>
+                    <td class="py-2.5 px-3 text-right font-medium text-slate-600 whitespace-nowrap text-xs">
+                        ${formatVND(it.cost || 0)}
+                    </td>
+                    <td class="py-2.5 px-3 text-right font-extrabold text-emerald-600 whitespace-nowrap text-xs">
+                        +${formatVND(it.amount || 0)}
+                    </td>
+                    <td class="py-2.5 px-3 text-center">
+                        <button type="button" onclick="openPatientDetail(${it.patient_id})"
+                                class="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 font-bold rounded-lg text-xs transition inline-flex items-center gap-1 cursor-pointer"
+                                title="Xem hồ sơ bệnh nhân">
+                            <i class="fa-regular fa-folder-open text-[11px]"></i>
+                            <span>Xem</span>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+        return;
+    }
+
+    // Unpaid or All
+    let sourceList = currentReconData.tab === 'unpaid' ? currentReconData.unpaid_treatments : currentReconData.all_treatments;
+    let items = [...sourceList];
+
+    if (q) {
+        items = items.filter(it =>
+            (it.patient_name || '').toLowerCase().includes(q) ||
+            (it.patient_phone || '').toLowerCase().includes(q) ||
+            (it.patient_code || '').toLowerCase().includes(q) ||
+            (it.procedure || '').toLowerCase().includes(q) ||
+            (it.dentist || '').toLowerCase().includes(q)
+        );
+    }
+
+    if (footerSummary) {
+        footerSummary.textContent = `Hiển thị ${items.length} / ${sourceList.length} ca (${currentReconData.tab === 'unpaid' ? 'Còn nợ cần đối soát' : 'Tất cả ca khám'})`;
+    }
+
+    if (items.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" class="py-10 text-center text-slate-400">
+                    <i class="fa-regular fa-circle-check text-3xl mb-2 text-emerald-400"></i>
+                    <p class="font-medium text-xs">${currentReconData.tab === 'unpaid' ? 'Không có bệnh nhân nào còn nợ trong tháng này!' : 'Không có ca khám nào phù hợp'}</p>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = items.map((it, idx) => {
+        const dateStr = it.visit_date ? formatDateVN(it.visit_date) : '<span class="text-slate-400 italic">Chưa rõ</span>';
+        const code = it.patient_code || ('BN' + String(it.patient_id).padStart(5, '0'));
+        const hasDebt = (it.debt || 0) > 0;
+        return `
+            <tr class="hover:bg-rose-50/30 transition ${hasDebt ? 'bg-rose-50/10' : ''}">
+                <td class="py-2.5 px-3 text-center text-slate-400 font-medium text-xs">${idx + 1}</td>
+                <td class="py-2.5 px-3 font-semibold text-slate-800 whitespace-nowrap text-xs">
+                    <i class="fa-regular fa-calendar text-rose-600 mr-1 text-[11px]"></i>${dateStr}
+                </td>
+                <td class="py-2.5 px-3">
+                    <button type="button" onclick="openPatientDetail(${it.patient_id})"
+                            class="text-left font-bold text-teal-700 hover:text-teal-900 hover:underline flex items-center gap-1.5 cursor-pointer">
+                        <span>${escapeHtml(it.patient_name || 'Khách vãng lai')}</span>
+                        <span class="text-[10px] font-mono font-medium px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded">${code}</span>
+                    </button>
+                    ${it.patient_phone ? `<div class="text-[11px] text-slate-500 font-mono mt-0.5"><i class="fa-solid fa-phone text-[9px] text-slate-400 mr-1"></i>${escapeHtml(it.patient_phone)}</div>` : ''}
+                </td>
+                <td class="py-2.5 px-3 hidden sm:table-cell">
+                    <div class="font-medium text-slate-800 text-xs">${escapeHtml(it.procedure || '—')}</div>
+                    <div class="flex items-center gap-2 mt-0.5">
+                        <span class="text-[10px] px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded font-semibold">${escapeHtml(it.category || 'Khác')}</span>
+                        ${it.tooth ? `<span class="text-[10px] text-teal-600 font-semibold">Răng: ${escapeHtml(it.tooth)}</span>` : ''}
+                    </div>
+                </td>
+                <td class="py-2.5 px-3 hidden md:table-cell text-xs text-slate-600 font-medium whitespace-nowrap">
+                    ${escapeHtml(it.dentist || '—')}
+                </td>
+                <td class="py-2.5 px-3 text-right font-semibold text-slate-700 whitespace-nowrap text-xs">
+                    ${formatVND(it.cost || 0)}
+                </td>
+                <td class="py-2.5 px-3 text-right font-extrabold text-emerald-600 whitespace-nowrap text-xs">
+                    ${formatVND(it.total_paid || 0)}
+                </td>
+                <td class="py-2.5 px-3 text-right whitespace-nowrap text-xs ${hasDebt ? 'font-black text-rose-600 bg-rose-50/70 px-2 rounded-lg' : 'text-slate-400'}">
+                    ${hasDebt ? `+${formatVND(it.debt)}` : '0K'}
+                </td>
+                <td class="py-2.5 px-3 text-center">
+                    <button type="button" onclick="openPatientDetail(${it.patient_id})"
+                            class="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 font-bold rounded-lg text-xs transition inline-flex items-center gap-1 cursor-pointer"
+                            title="Mở hồ sơ bệnh nhân để đối soát / thu nợ">
                         <i class="fa-regular fa-folder-open text-[11px]"></i>
                         <span>Xem</span>
                     </button>

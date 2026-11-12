@@ -1186,6 +1186,84 @@ def report_category_patients(category: str, year: int = 0, branch: str = "", ord
     }
 
 
+@app.get("/api/admin/reports/month-reconciliation")
+def report_month_reconciliation(month: str, branch: str = "", user=Depends(admin_only)):
+    if not re.match(r"^\d{4}-\d{2}$", month):
+        raise HTTPException(status_code=400, detail="Định dạng tháng không hợp lệ (YYYY-MM)")
+
+    bw_t, bp_t = ("AND t.branch=?", [branch]) if branch else ("", [])
+    with db() as conn:
+        # 1. Treatments performed in this month
+        treat_rows = conn.execute(
+            f"""
+            SELECT t.id AS treatment_id, t.patient_id, p.code AS patient_code, p.name AS patient_name,
+                   p.phone AS patient_phone, t.visit_date, t.branch, t.category, t.dentist,
+                   t.procedure, t.tooth, t.cost,
+                   COALESCE((SELECT SUM(pay.amount) FROM payments pay WHERE pay.treatment_id = t.id), 0) AS total_paid,
+                   COALESCE((SELECT SUM(pay.amount) FROM payments pay WHERE pay.treatment_id = t.id AND substr(pay.paid_on, 1, 7) = ?), 0) AS paid_in_month
+            FROM treatments t
+            JOIN patients p ON p.id = t.patient_id
+            WHERE substr(t.visit_date, 1, 7) = ? {bw_t}
+            ORDER BY t.visit_date DESC, t.id DESC
+            """,
+            [month, month] + bp_t
+        ).fetchall()
+
+        # 2. Payments collected in this month for treatments of PRIOR or OTHER months
+        old_pay_rows = conn.execute(
+            f"""
+            SELECT pay.id AS payment_id, pay.amount, pay.paid_on, pay.method,
+                   t.id AS treatment_id, t.visit_date AS treatment_date, t.procedure, t.cost,
+                   p.id AS patient_id, p.code AS patient_code, p.name AS patient_name, p.phone AS patient_phone
+            FROM payments pay
+            JOIN treatments t ON t.id = pay.treatment_id
+            JOIN patients p ON p.id = t.patient_id
+            WHERE substr(pay.paid_on, 1, 7) = ?
+              AND (t.visit_date IS NULL OR substr(t.visit_date, 1, 7) <> ?) {bw_t}
+            ORDER BY pay.paid_on DESC, pay.id DESC
+            """,
+            [month, month] + bp_t
+        ).fetchall()
+
+    treatments = []
+    unpaid_treatments = []
+    total_billed = 0
+    total_paid_in_month_for_this = 0
+
+    for r in treat_rows:
+        d = dict(r)
+        d["debt"] = max(0, (d["cost"] or 0) - (d["total_paid"] or 0))
+        total_billed += d["cost"] or 0
+        total_paid_in_month_for_this += d["paid_in_month"] or 0
+        treatments.append(d)
+        if d["debt"] > 0:
+            unpaid_treatments.append(d)
+
+    old_debt_collections = [dict(r) for r in old_pay_rows]
+    total_old_debt_collected = sum(p["amount"] or 0 for p in old_debt_collections)
+
+    total_collected = total_paid_in_month_for_this + total_old_debt_collected
+    diff = total_billed - total_collected
+
+    return {
+        "month": month,
+        "branch": branch,
+        "summary": {
+            "total_billed": total_billed,
+            "total_collected": total_collected,
+            "diff": diff,
+            "paid_for_month_treatments": total_paid_in_month_for_this,
+            "unpaid_month_debt": total_billed - total_paid_in_month_for_this,
+            "collected_from_old_debt": total_old_debt_collected,
+            "unpaid_count": len(unpaid_treatments),
+            "old_debt_count": len(old_debt_collections),
+        },
+        "unpaid_treatments": unpaid_treatments,
+        "all_treatments": treatments,
+        "old_debt_collections": old_debt_collections,
+    }
+
+
 @app.get("/api/admin/audit")
 def audit_list(scope: str = "changes", limit: int = 100, offset: int = 0, user=Depends(admin_only)):
     sensitive = ("patient_edit", "patient_delete", "treatment_edit", "treatment_delete", "payment_delete",

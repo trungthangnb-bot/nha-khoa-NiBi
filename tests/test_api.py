@@ -649,6 +649,30 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(res_asc.status_code, 200)
         self.assertEqual([i["patient_name"] for i in res_asc.json()["items"]], ["BN A Test82", "BN B Test82"])
 
+    def test_83_report_month_reconciliation(self):
+        p_recon = self.new_patient("BN Recon Test", phone="0977889900")
+        # Treatment in 2024-08 with partial payment
+        t = self.c.post(f"/api/patients/{p_recon['id']}/treatments", json={
+            "visit_date": "2024-08-12", "branch": "Ninh Vân",
+            "category": "Nhổ răng", "procedure": "Nhổ răng khôn", "cost": 1500000, "paid": 500000
+        }, headers=self.staff).json()
+        self.assertIn("id", t)
+
+        # Staff forbidden
+        self.assertEqual(self.c.get("/api/admin/reports/month-reconciliation?month=2024-08", headers=self.staff).status_code, 403)
+
+        # Admin gets reconciliation
+        res = self.c.get("/api/admin/reports/month-reconciliation?month=2024-08", headers=self.admin)
+        self.assertEqual(res.status_code, 200)
+        d = res.json()
+        self.assertEqual(d["month"], "2024-08")
+        self.assertGreaterEqual(d["summary"]["total_billed"], 1500000)
+        self.assertGreaterEqual(d["summary"]["diff"], 1000000)
+        unpaid = [it for it in d["unpaid_treatments"] if it["treatment_id"] == t["id"]]
+        self.assertEqual(len(unpaid), 1)
+        self.assertEqual(unpaid[0]["debt"], 1000000)
+        self.assertEqual(unpaid[0]["patient_name"], "BN Recon Test")
+
     def test_99_logout_invalidates_token(self):
         h = self.login("letan", "abc123")
         self.assertEqual(self.c.post("/api/auth/logout", headers=h).status_code, 200)

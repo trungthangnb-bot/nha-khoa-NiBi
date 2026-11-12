@@ -2118,6 +2118,117 @@
         </div>
     </div>
 
+    <!-- 12c. MONTH RECONCILIATION & DEBT EXPLANATION MODAL -->
+    <div id="month-reconciliation-modal" class="hidden fixed inset-0 z-[39] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-2 md:p-4">
+        <div class="bg-white w-full max-w-5xl rounded-2xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[94vh]">
+            <!-- Modal Header -->
+            <div class="bg-gradient-to-r from-rose-900 via-rose-800 to-slate-900 px-5 py-4 text-white flex items-center justify-between flex-shrink-0 border-b border-rose-500/20">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-rose-500/20 border border-rose-400/40 text-rose-200 flex items-center justify-center text-lg shadow-inner">
+                        <i class="fa-solid fa-scale-balanced"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 id="recon-modal-title" class="font-extrabold text-base text-white">Đối Soát & Giải Trình Chênh Lệch Tồn Nợ</h3>
+                            <span class="px-2 py-0.5 bg-rose-500/30 text-rose-100 font-extrabold text-[10px] rounded-full uppercase border border-rose-400/30">Admin Đối Soát</span>
+                        </div>
+                        <p id="recon-modal-subtitle" class="text-xs text-rose-100/80 mt-0.5">Giải trình chi tiết các bệnh nhân phát sinh nợ trong tháng</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeMonthReconciliationModal()" class="text-white/80 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Financial Reconciliation Strip (Giải trình tài chính) -->
+            <div class="bg-rose-50/50 border-b border-rose-100 p-4 flex-shrink-0">
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">1. Phát sinh điều trị</span>
+                        <h4 id="recon-card-billed" class="text-base sm:text-lg font-black text-slate-800 mt-0.5">0K</h4>
+                        <p class="text-[10px] text-slate-400 mt-0.5">Tổng giá trị các ca khám trong tháng</p>
+                    </div>
+                    <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-teal-600 block">2. Đã thu của ca trong tháng</span>
+                        <h4 id="recon-card-paid-now" class="text-base sm:text-lg font-black text-teal-700 mt-0.5">0K</h4>
+                        <p class="text-[10px] text-teal-600/80 mt-0.5">Tiền thu ngay từ các ca tháng này</p>
+                    </div>
+                    <div class="bg-white p-3 rounded-xl border border-rose-200 bg-rose-50/30 shadow-sm">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-rose-600 block">3. Nợ mới chưa thu</span>
+                        <h4 id="recon-card-unpaid" class="text-base sm:text-lg font-black text-rose-600 mt-0.5">0K</h4>
+                        <p id="recon-card-unpaid-sub" class="text-[10px] text-rose-500 font-semibold mt-0.5">0 bệnh nhân còn nợ</p>
+                    </div>
+                    <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-600 block">4. Thực thu vào quỹ</span>
+                        <h4 id="recon-card-collected" class="text-base sm:text-lg font-black text-emerald-600 mt-0.5">0K</h4>
+                        <p id="recon-card-collected-sub" class="text-[10px] text-slate-400 mt-0.5">Thu ca tháng này + Thu nợ cũ</p>
+                    </div>
+                </div>
+
+                <!-- Mathematical explanation bar -->
+                <div id="recon-formula-banner" class="mt-2.5 p-2 bg-white rounded-lg border border-rose-200 text-xs text-slate-700 flex items-center justify-between flex-wrap gap-2">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Controls bar & Tab Filters -->
+            <div class="bg-slate-50 border-b border-slate-200 px-4 md:px-5 py-2.5 flex flex-wrap items-center justify-between gap-2.5 flex-shrink-0 text-xs">
+                <div class="flex items-center gap-1.5 bg-slate-200/70 p-1 rounded-xl">
+                    <button type="button" id="recon-tab-unpaid" onclick="switchReconTab('unpaid')"
+                            class="px-3 py-1.5 rounded-lg font-bold text-xs transition bg-white text-rose-700 shadow-sm">
+                        BN Còn nợ (<span id="recon-badge-unpaid">0</span>)
+                    </button>
+                    <button type="button" id="recon-tab-all" onclick="switchReconTab('all')"
+                            class="px-3 py-1.5 rounded-lg font-bold text-xs transition text-slate-600 hover:text-slate-900">
+                        Tất cả ca khám (<span id="recon-badge-all">0</span>)
+                    </button>
+                    <button type="button" id="recon-tab-old" onclick="switchReconTab('old')"
+                            class="px-3 py-1.5 rounded-lg font-bold text-xs transition text-slate-600 hover:text-slate-900">
+                        Thu nợ cũ trong tháng (<span id="recon-badge-old">0</span>)
+                    </button>
+                </div>
+
+                <div class="relative flex-1 max-w-xs min-w-[180px]">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[11px]"></i>
+                    <input type="text" id="recon-search-input" oninput="renderReconciliationTable()"
+                           placeholder="Tìm tên BN, SĐT, thủ thuật..."
+                           class="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs focus:outline-none focus:border-rose-500">
+                </div>
+            </div>
+
+            <!-- Table Container -->
+            <div class="overflow-auto custom-scrollbar flex-1 bg-white">
+                <table class="w-full text-left border-collapse text-xs md:text-sm">
+                    <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-[11px] border-b border-slate-200 sticky top-0 z-10">
+                        <tr id="recon-table-header">
+                            <th class="py-2.5 px-3 text-center w-10">#</th>
+                            <th class="py-2.5 px-3 whitespace-nowrap">Ngày khám</th>
+                            <th class="py-2.5 px-3">Bệnh nhân</th>
+                            <th class="py-2.5 px-3 hidden sm:table-cell">Nội dung điều trị</th>
+                            <th class="py-2.5 px-3 hidden md:table-cell">Bác sĩ</th>
+                            <th class="py-2.5 px-3 text-right whitespace-nowrap">Chi phí</th>
+                            <th class="py-2.5 px-3 text-right whitespace-nowrap">Đã đóng</th>
+                            <th class="py-2.5 px-3 text-right whitespace-nowrap">Còn nợ</th>
+                            <th class="py-2.5 px-3 text-center w-20">Hồ sơ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recon-table-tbody" class="divide-y divide-slate-100">
+                        <!-- Dynamically populated -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="bg-slate-50 border-t border-slate-200 px-5 py-3 flex items-center justify-between flex-shrink-0">
+                <span id="recon-footer-summary" class="text-xs text-slate-500 font-medium">Đang tải đối soát...</span>
+                <button type="button" onclick="closeMonthReconciliationModal()"
+                        class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xl text-xs transition">
+                    Đóng
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- 13. FLOATING AI ASSISTANT CHATBOT & TOGGLE BUTTON -->
     <div id="ai-chat-drawer" class="hidden fixed bottom-20 md:bottom-24 right-4 md:right-6 z-40 w-[calc(100vw-2rem)] sm:w-96 max-h-[82vh] h-[520px] bg-white rounded-2xl shadow-2xl border border-indigo-100 flex flex-col overflow-hidden transition-all duration-300 transform scale-95 origin-bottom-right">
         <!-- Header -->
@@ -2504,6 +2615,6 @@
     <div id="toast-container" class="fixed bottom-20 md:bottom-6 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-sm"></div>
 
     <!-- App JavaScript -->
-    <script src="/static/app.js?v=ai1.9-cat-patients"></script>
+    <script src="/static/app.js?v=ai2.0-recon-reconciliation"></script>
 </body>
 </html>
