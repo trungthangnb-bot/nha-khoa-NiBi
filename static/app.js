@@ -704,32 +704,91 @@ async function loadDashboard() {
     }
 }
 
+let dashboardSeriesCache = [];
+
+function formatShortMoney(v) {
+    if (!v || v <= 0) return '';
+    if (v >= 1000000) {
+        return (v / 1000000).toFixed(1).replace(/\.0$/, '') + 'Tr';
+    }
+    return Math.round(v / 1000) + 'K';
+}
+
+async function openAdminReports() {
+    currentAdminSubTab = 'reports';
+    await switchTab('admin-hub');
+}
+
+function selectChartMonth(idx) {
+    const s = dashboardSeriesCache[idx];
+    if (!s) return;
+
+    document.querySelectorAll('.chart-month-col').forEach((el, i) => {
+        if (i === idx) {
+            el.classList.add('bg-teal-50/80', 'ring-1', 'ring-teal-300');
+        } else {
+            el.classList.remove('bg-teal-50/80', 'ring-1', 'ring-teal-300');
+        }
+    });
+
+    const detailEl = document.getElementById('dashboard-chart-detail');
+    if (!detailEl) return;
+
+    const parts = s.month.split('-');
+    const monthTitle = `${parts[1]}/${parts[0]}`;
+    const diff = Math.max((s.billed || 0) - (s.collected || 0), 0);
+
+    detailEl.innerHTML = `
+        <div class="flex items-center gap-2">
+            <span class="px-2.5 py-1 bg-teal-600 text-white font-extrabold rounded-lg text-[11px]">Tháng ${monthTitle}</span>
+            <span class="text-slate-500 hidden sm:inline">Chi tiết doanh thu tháng</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-4 sm:gap-6">
+            <div>
+                <span class="text-slate-400 text-[10px] font-bold uppercase block">Phát sinh điều trị</span>
+                <span class="font-extrabold text-slate-800 text-sm">${formatVND(s.billed)}</span>
+            </div>
+            <div>
+                <span class="text-slate-400 text-[10px] font-bold uppercase block">Thực thu vào quỹ</span>
+                <span class="font-extrabold text-teal-600 text-sm">${formatVND(s.collected)}</span>
+            </div>
+            <div>
+                <span class="text-slate-400 text-[10px] font-bold uppercase block">Chênh lệch / Tồn nợ</span>
+                <span class="font-extrabold ${diff > 0 ? 'text-rose-600' : 'text-emerald-600'} text-sm">${diff > 0 ? formatVND(diff) : 'Thu đủ 100%'}</span>
+            </div>
+        </div>
+    `;
+}
+
 function renderDashboardChart(series) {
     const container = document.getElementById('dashboard-chart-container');
     if (!container || !series || series.length === 0) return;
 
+    dashboardSeriesCache = series;
     const maxVal = Math.max(...series.map(s => Math.max(s.collected, s.billed)), 1000000);
-    container.innerHTML = series.map(s => {
+    container.innerHTML = series.map((s, idx) => {
         const hCollected = Math.max(Math.round((s.collected / maxVal) * 140), 4);
         const hBilled = Math.max(Math.round((s.billed / maxVal) * 140), 4);
         const monthLabel = s.month.split('-')[1] + '/' + s.month.split('-')[0].slice(2);
+        const shortCollected = formatShortMoney(s.collected);
         return `
-            <div class="flex-1 min-w-[36px] flex flex-col items-center gap-1 group relative">
-                <!-- Tooltip -->
-                <div class="hidden group-hover:block absolute -top-16 bg-slate-900 text-white text-[10px] py-1 px-2 rounded shadow-lg whitespace-nowrap z-30 pointer-events-none">
-                    <p class="font-bold text-teal-300">Tháng ${s.month}</p>
-                    <p>Thực thu: ${formatVND(s.collected)}</p>
-                    <p>Phát sinh: ${formatVND(s.billed)}</p>
-                </div>
+            <div onclick="selectChartMonth(${idx})" class="chart-month-col flex-1 min-w-[46px] flex flex-col items-center gap-1 group relative cursor-pointer p-1 rounded-xl hover:bg-slate-50 transition">
+                <!-- Value Label above bar -->
+                <span class="text-[10px] font-extrabold ${s.collected > 0 ? 'text-teal-700' : 'text-slate-300'} whitespace-nowrap h-4 leading-4">
+                    ${shortCollected || '0'}
+                </span>
                 <!-- Dual Bars -->
                 <div class="w-full flex items-end justify-center gap-1 h-36">
-                    <div style="height: ${hBilled}px" class="w-2.5 bg-slate-200 rounded-t-sm group-hover:bg-slate-300 transition-all"></div>
-                    <div style="height: ${hCollected}px" class="w-2.5 bg-teal-500 rounded-t-sm group-hover:bg-teal-600 transition-all"></div>
+                    <div style="height: ${hBilled}px" class="w-3 bg-slate-300 rounded-t-sm group-hover:bg-slate-400 transition-all"></div>
+                    <div style="height: ${hCollected}px" class="w-3 bg-teal-500 rounded-t-sm group-hover:bg-teal-600 transition-all"></div>
                 </div>
-                <span class="text-[10px] text-slate-400 font-medium">${monthLabel}</span>
+                <span class="text-[10px] text-slate-600 font-bold">${monthLabel}</span>
             </div>
         `;
     }).join('');
+
+    // Auto-select the latest month (current month)
+    selectChartMonth(series.length - 1);
 }
 
 // ==================== TODAY VISITS RECONCILIATION MODAL ====================

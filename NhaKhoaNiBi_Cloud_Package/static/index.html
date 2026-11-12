@@ -448,16 +448,28 @@
                 <div class="admin-only bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
                     <div class="flex items-center justify-between flex-wrap gap-2">
                         <div>
-                            <h3 class="font-bold text-slate-800 text-base">Biểu đồ doanh thu thực thu 12 tháng gần nhất</h3>
-                            <p class="text-xs text-slate-500">Tiền thực thu vào quỹ theo từng tháng</p>
+                            <h3 class="font-bold text-slate-800 text-base">Biểu đồ doanh thu 12 tháng gần nhất</h3>
+                            <div class="flex items-center gap-4 text-xs text-slate-500 mt-1">
+                                <span class="inline-flex items-center gap-1.5">
+                                    <span class="w-2.5 h-2.5 rounded-sm bg-slate-300 inline-block"></span>
+                                    <span>Phát sinh điều trị</span>
+                                </span>
+                                <span class="inline-flex items-center gap-1.5 font-semibold text-teal-700">
+                                    <span class="w-2.5 h-2.5 rounded-sm bg-teal-500 inline-block"></span>
+                                    <span>Thực thu vào quỹ</span>
+                                </span>
+                            </div>
                         </div>
-                        <button onclick="switchTab('reports')" class="text-xs font-bold text-teal-600 hover:text-teal-700 flex items-center gap-1">
+                        <button onclick="openAdminReports()" class="px-3 py-1.5 bg-teal-50 hover:bg-teal-100 rounded-xl text-xs font-bold text-teal-700 flex items-center gap-1.5 transition">
                             <span>Chi tiết báo cáo</span>
                             <i class="fa-solid fa-chevron-right text-[10px]"></i>
                         </button>
                     </div>
-                    <div id="dashboard-chart-container" class="h-48 flex items-end gap-2 pt-6 pb-2 px-1 border-b border-slate-100 overflow-x-auto custom-scrollbar">
+                    <div id="dashboard-chart-container" class="h-56 flex items-end gap-2 sm:gap-3 pt-8 pb-2 px-1 border-b border-slate-100 overflow-x-auto custom-scrollbar">
                         <!-- Chart bars dynamically rendered -->
+                    </div>
+                    <div id="dashboard-chart-detail" class="bg-slate-50 border border-slate-200/80 rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+                        <span class="text-slate-400">Chọn hoặc chạm vào từng cột tháng để xem số liệu chi tiết</span>
                     </div>
                 </div>
 
@@ -2417,6 +2429,6 @@
     <div id="toast-container" class="fixed bottom-20 md:bottom-6 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-sm"></div>
 
     <!-- App JavaScript -->
-    <script src="/static/app.js?v=ai1.7-bold-notes"></script>
+    <script src="/static/app.js?v=ai1.8-chart-reports"></script>
 </body>
 </html>
