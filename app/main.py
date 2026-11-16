@@ -1466,8 +1466,16 @@ def api_ai_parse_intake(data: AiIntakeIn, user=Depends(current_user)):
 def api_ai_chat(data: AiChatIn, user=Depends(current_user)):
     """Trợ lý AI hỏi đáp dữ liệu phòng khám thời gian thực."""
     is_admin = (user.get("role") == "admin")
-    result = answer_clinic_query(data.message, is_admin=is_admin)
-    return {"ok": True, **result}
+    try:
+        result = answer_clinic_query(data.message, is_admin=is_admin)
+        return {"ok": True, **result}
+    except Exception as e:
+        logger.exception("AI chat error: %s", e)
+        return {
+            "ok": True,
+            "reply": f"⚠️ Trợ lý AI đang cập nhật dữ liệu ({e}). Bác sĩ vui lòng gửi lại câu hỏi hoặc tra cứu trực tiếp trên hệ thống nhé!",
+            "source": "error_fallback"
+        }
 
 
 @app.get("/api/admin/backup.db")

@@ -458,11 +458,15 @@ def answer_clinic_query(message: str, api_key: str = "", is_admin: bool = False)
 
     # Fetch live database snapshot
     with db() as conn:
-        conn.row_factory = None
-        total_patients = conn.execute("SELECT COUNT(id) FROM patients").fetchone()[0]
+        try:
+            conn.row_factory = None
+        except Exception:
+            pass
+        total_p_row = conn.execute("SELECT COUNT(id) FROM patients").fetchone()
+        total_patients = int(total_p_row[0] or 0) if total_p_row else 0
 
         # Monthly revenue (chỉ tính nếu là admin)
-        month_total, month_cash, month_transfer = 0, 0, 0
+        month_total, month_cash, month_transfer = 0.0, 0.0, 0.0
         if is_admin:
             rev_row = conn.execute("""
                 SELECT 
@@ -472,24 +476,32 @@ def answer_clinic_query(message: str, api_key: str = "", is_admin: bool = False)
                 FROM payments
                 WHERE paid_on LIKE ?
             """, (current_month_str + '%',)).fetchone()
-            month_total, month_cash, month_transfer = rev_row
+            if rev_row:
+                try:
+                    month_total = float(rev_row[0] or 0)
+                    month_cash = float(rev_row[1] or 0)
+                    month_transfer = float(rev_row[2] or 0)
+                except (ValueError, TypeError):
+                    month_total, month_cash, month_transfer = 0.0, 0.0, 0.0
 
         # Total debt
-        debt_total = conn.execute("""
+        debt_row = conn.execute("""
             WITH tp AS (
                 SELECT t.cost, COALESCE((SELECT SUM(amount) FROM payments WHERE treatment_id = t.id), 0) as paid
                 FROM treatments t
             )
-            SELECT COALESCE(SUM(MAX(cost - paid, 0)), 0) FROM tp WHERE cost > paid
-        """).fetchone()[0]
+            SELECT COALESCE(SUM(cost - paid), 0) FROM tp WHERE cost > paid
+        """).fetchone()
+        debt_total = float(debt_row[0] or 0) if debt_row else 0.0
 
-        debt_patients_count = conn.execute("""
+        debt_p_row = conn.execute("""
             WITH tp AS (
                 SELECT t.patient_id, t.cost, COALESCE((SELECT SUM(amount) FROM payments WHERE treatment_id = t.id), 0) as paid
                 FROM treatments t
             )
             SELECT COUNT(DISTINCT patient_id) FROM tp WHERE cost > paid
-        """).fetchone()[0]
+        """).fetchone()
+        debt_patients_count = int(debt_p_row[0] or 0) if debt_p_row else 0
 
         # Top 5 debtors
         top_debtors = conn.execute("""
@@ -497,7 +509,7 @@ def answer_clinic_query(message: str, api_key: str = "", is_admin: bool = False)
                 SELECT t.patient_id, t.cost, COALESCE((SELECT SUM(amount) FROM payments WHERE treatment_id = t.id), 0) as paid
                 FROM treatments t
             )
-            SELECT p.name, p.phone, p.branch, SUM(MAX(tp.cost - tp.paid, 0)) as debt
+            SELECT p.name, p.phone, p.branch, SUM(tp.cost - tp.paid) as debt
             FROM patients p
             JOIN tp ON tp.patient_id = p.id
             WHERE tp.cost > tp.paid
