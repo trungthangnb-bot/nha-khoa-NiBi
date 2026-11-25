@@ -4534,14 +4534,95 @@ const dedupState = {
     loading: false
 };
 
+function getDedupDismissedGroups() {
+    try {
+        return JSON.parse(localStorage.getItem('nibi_dismissed_groups') || '[]');
+    } catch (e) {
+        return [];
+    }
+}
+
+function getDedupExcludedPatients() {
+    try {
+        return JSON.parse(localStorage.getItem('nibi_excluded_patients') || '[]');
+    } catch (e) {
+        return [];
+    }
+}
+
+function refreshDedupStatsAndCounters() {
+    const total = dedupState.groups.length;
+    const high = dedupState.groups.filter(g => g.match_level === 'high').length;
+    const med = dedupState.groups.filter(g => g.match_level === 'medium').length;
+    const low = dedupState.groups.filter(g => g.match_level === 'low').length;
+
+    const statTotal = document.getElementById('dedup-stat-total');
+    if (statTotal) statTotal.textContent = total;
+    const statHigh = document.getElementById('dedup-stat-high');
+    if (statHigh) statHigh.textContent = high;
+    const statMed = document.getElementById('dedup-stat-medium');
+    if (statMed) statMed.textContent = med;
+    const statLow = document.getElementById('dedup-stat-low');
+    if (statLow) statLow.textContent = low;
+
+    const modalBadge = document.getElementById('dedup-modal-badge');
+    if (modalBadge) modalBadge.textContent = `${total} nhóm`;
+    const fAll = document.getElementById('dedup-filter-count-all');
+    if (fAll) fAll.textContent = total;
+    const fHigh = document.getElementById('dedup-filter-count-high');
+    if (fHigh) fHigh.textContent = high;
+    const fMed = document.getElementById('dedup-filter-count-medium');
+    if (fMed) fMed.textContent = med;
+    const fLow = document.getElementById('dedup-filter-count-low');
+    if (fLow) fLow.textContent = low;
+
+    const badge = document.getElementById('duplicate-patients-badge');
+    if (badge) {
+        if (total > 0) {
+            badge.textContent = total;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
+    }
+
+    const dismissedGroups = getDedupDismissedGroups();
+    const excludedPatients = getDedupExcludedPatients();
+    const totalDismissed = dismissedGroups.length + excludedPatients.length;
+
+    const restoreBtn = document.getElementById('btn-dedup-restore-dismissed');
+    const dismissedCountEl = document.getElementById('dedup-dismissed-count');
+    if (restoreBtn && dismissedCountEl) {
+        dismissedCountEl.textContent = totalDismissed;
+        if (totalDismissed > 0) {
+            restoreBtn.classList.remove('hidden');
+            restoreBtn.classList.add('flex');
+        } else {
+            restoreBtn.classList.add('hidden');
+            restoreBtn.classList.remove('flex');
+        }
+    }
+}
+
 async function checkDuplicatePatientsCount() {
     if (!state.user || state.user.role !== 'admin') return;
     try {
         const data = await api('/api/admin/patients/duplicates');
+        const dismissedGroups = getDedupDismissedGroups();
+        const excludedPatients = getDedupExcludedPatients();
+
+        const activeGroups = (data.groups || [])
+            .filter(g => !dismissedGroups.includes(g.norm_name || g.name.toLowerCase().trim()))
+            .map(g => ({
+                ...g,
+                patients: g.patients.filter(p => !excludedPatients.includes(p.id))
+            }))
+            .filter(g => g.patients.length > 1);
+
         const badge = document.getElementById('duplicate-patients-badge');
         if (badge) {
-            if (data.total_groups > 0) {
-                badge.textContent = data.total_groups;
+            if (activeGroups.length > 0) {
+                badge.textContent = activeGroups.length;
                 badge.classList.remove('hidden');
             } else {
                 badge.classList.add('hidden');
@@ -4571,43 +4652,32 @@ async function openDuplicatePatientsModal() {
 
     try {
         const data = await api('/api/admin/patients/duplicates');
-        dedupState.groups = data.groups || [];
+
+        const dismissedGroups = getDedupDismissedGroups();
+        const excludedPatients = getDedupExcludedPatients();
+
+        // Filter out dismissed groups and excluded individual patients
+        const rawGroups = (data.groups || [])
+            .filter(g => !dismissedGroups.includes(g.norm_name || g.name.toLowerCase().trim()))
+            .map(g => ({
+                ...g,
+                patients: g.patients.filter(p => !excludedPatients.includes(p.id))
+            }))
+            .filter(g => g.patients.length > 1);
+
+        dedupState.groups = rawGroups;
         dedupState.filter = 'all';
         dedupState.selectedTargets = {};
         dedupState.agreedGroups = {};
 
-        // Default: target is suggested_target_id, agreed is false (explicit admin confirmation required)
+        // Default: target is suggested_target_id (or first patient if suggested was excluded)
         dedupState.groups.forEach(g => {
-            dedupState.selectedTargets[g.group_id] = g.suggested_target_id;
+            const hasSuggested = g.patients.some(p => p.id === g.suggested_target_id);
+            dedupState.selectedTargets[g.group_id] = hasSuggested ? g.suggested_target_id : g.patients[0].id;
             dedupState.agreedGroups[g.group_id] = false;
         });
 
-        const total = data.total_groups || 0;
-        const high = data.counts_by_level?.high || 0;
-        const med = data.counts_by_level?.medium || 0;
-        const low = data.counts_by_level?.low || 0;
-
-        document.getElementById('dedup-stat-total').textContent = total;
-        document.getElementById('dedup-stat-high').textContent = high;
-        document.getElementById('dedup-stat-medium').textContent = med;
-        document.getElementById('dedup-stat-low').textContent = low;
-
-        document.getElementById('dedup-modal-badge').textContent = `${total} nhóm`;
-        document.getElementById('dedup-filter-count-all').textContent = total;
-        document.getElementById('dedup-filter-count-high').textContent = high;
-        document.getElementById('dedup-filter-count-medium').textContent = med;
-        document.getElementById('dedup-filter-count-low').textContent = low;
-
-        const badge = document.getElementById('duplicate-patients-badge');
-        if (badge) {
-            if (total > 0) {
-                badge.textContent = total;
-                badge.classList.remove('hidden');
-            } else {
-                badge.classList.add('hidden');
-            }
-        }
-
+        refreshDedupStatsAndCounters();
         renderDedupGroups();
     } catch (e) {
         showToast('Lỗi khi tải danh sách bệnh nhân trùng lặp: ' + e.message, 'error');
@@ -4682,6 +4752,7 @@ function renderDedupGroups() {
             return `
                 <div onclick="onSelectDedupTarget(${g.group_id}, ${p.id})"
                      class="cursor-pointer relative p-3.5 rounded-xl border-2 transition-all ${isTarget ? 'bg-amber-50/80 border-amber-500 shadow-md ring-2 ring-amber-200/60' : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'}">
+                    <!-- Top Bar: Radio & Status Badges & Exclude Button -->
                     <div class="flex items-center justify-between gap-2 mb-2">
                         <label class="flex items-center gap-2 cursor-pointer select-none" onclick="event.stopPropagation()">
                             <input type="radio" name="target_group_${g.group_id}" value="${p.id}" ${isTarget ? 'checked' : ''}
@@ -4691,12 +4762,19 @@ function renderDedupGroups() {
                                 ${isTarget ? '⭐ Hồ sơ Gốc (Giữ lại)' : 'Chọn giữ hồ sơ này'}
                             </span>
                         </label>
-                        <div class="flex items-center gap-1">
-                            ${isSuggested ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-teal-100 text-teal-800 border border-teal-200" title="Gợi ý giữ lại vì có nhiều đợt điều trị nhất">Gợi ý giữ</span>` : ''}
+                        <div class="flex items-center gap-1.5">
+                            ${isSuggested ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-black bg-teal-100 text-teal-800 border border-teal-200" title="Gợi ý giữ lại vì có nhiều đợt điều trị nhất">Gợi ý giữ</span>` : ''}
                             <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-100 text-slate-600">${escapeHtml(p.code || 'BN' + p.id)}</span>
+                            <button type="button" onclick="event.stopPropagation(); excludePatientFromGroup(${g.group_id}, ${p.id})"
+                                    class="px-2 py-0.5 rounded-lg text-[10px] font-bold text-rose-600 hover:text-white hover:bg-rose-600 bg-rose-50 border border-rose-200 transition flex items-center gap-1 shadow-2xs"
+                                    title="Loại bỏ hồ sơ này khỏi nhóm trùng để giữ nguyên độc lập, không bị gộp">
+                                <i class="fa-solid fa-user-minus text-[9px]"></i>
+                                <span>Loại khỏi nhóm</span>
+                            </button>
                         </div>
                     </div>
 
+                    <!-- Patient Info -->
                     <div class="space-y-1 text-xs">
                         <div class="flex items-center justify-between">
                             <span class="font-extrabold text-sm text-slate-800">${escapeHtml(p.name)}</span>
@@ -4716,6 +4794,7 @@ function renderDedupGroups() {
                         </div>
                     </div>
 
+                    <!-- Clinical Stats -->
                     <div class="mt-3 pt-2.5 border-t border-slate-100 grid grid-cols-3 gap-1.5 text-center text-[11px]">
                         <div class="bg-slate-50 p-1.5 rounded-lg border border-slate-100">
                             <span class="block text-[10px] text-slate-400 uppercase font-semibold">Đợt khám</span>
@@ -4759,8 +4838,14 @@ function renderDedupGroups() {
                         </div>
                     </div>
 
-                    <div class="flex items-center gap-2 justify-between md:justify-end">
+                    <div class="flex items-center gap-2 justify-between md:justify-end flex-wrap">
                         ${badgeHtml}
+                        <button type="button" onclick="dismissDedupGroup(${g.group_id})"
+                                class="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-rose-700 hover:bg-rose-50 bg-white border border-slate-200 transition flex items-center gap-1.5 shadow-2xs"
+                                title="Bỏ qua nhóm này vì đây là các bệnh nhân khác nhau, không phải trùng lặp">
+                            <i class="fa-solid fa-ban text-slate-400"></i>
+                            <span>Bỏ qua (Không trùng)</span>
+                        </button>
                         <button type="button" onclick="executeSingleGroupMerge(${g.group_id})" id="btn-merge-group-${g.group_id}"
                                 ${isAgreed ? '' : 'disabled'}
                                 class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${isAgreed ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}">
@@ -4773,7 +4858,7 @@ function renderDedupGroups() {
                 <div class="p-3.5 sm:p-4">
                     <p class="text-[11px] text-slate-500 mb-2.5">
                         <i class="fa-solid fa-hand-pointer text-amber-500 mr-1"></i>
-                        Chọn <b>1 hồ sơ gốc</b> để giữ lại làm mã bệnh nhân chính. Toàn bộ các hồ sơ còn lại sẽ được gộp vào hồ sơ này:
+                        Chọn <b>1 hồ sơ gốc</b> để giữ lại làm mã bệnh nhân chính. Nếu hồ sơ nào là người khác, bấm <b>"Loại khỏi nhóm"</b> để tách riêng:
                     </p>
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${Math.min(g.patients.length, 3)} gap-3">
                         ${patientCardsHtml}
@@ -4825,6 +4910,84 @@ function updateDedupBatchButton() {
     }
 }
 
+function excludePatientFromGroup(groupId, patientId) {
+    const group = dedupState.groups.find(g => g.group_id === groupId);
+    if (!group) return;
+
+    const patient = group.patients.find(p => p.id === patientId);
+    const patientName = patient ? patient.name : 'Bệnh nhân';
+    const patientCode = patient ? (patient.code || 'BN' + patient.id) : '';
+
+    group.patients = group.patients.filter(p => p.id !== patientId);
+
+    try {
+        const excluded = getDedupExcludedPatients();
+        if (!excluded.includes(patientId)) {
+            excluded.push(patientId);
+            localStorage.setItem('nibi_excluded_patients', JSON.stringify(excluded));
+        }
+    } catch (e) {}
+
+    // If removed patient was the selected target, pick the remaining patient with highest rank
+    if (dedupState.selectedTargets[groupId] === patientId) {
+        if (group.patients.length > 0) {
+            const sortedRemaining = [...group.patients].sort((a, b) => {
+                if ((b.treatments_count || 0) !== (a.treatments_count || 0)) {
+                    return (b.treatments_count || 0) - (a.treatments_count || 0);
+                }
+                return a.id - b.id;
+            });
+            dedupState.selectedTargets[groupId] = sortedRemaining[0].id;
+        } else {
+            delete dedupState.selectedTargets[groupId];
+        }
+    }
+
+    if (group.patients.length <= 1) {
+        dedupState.groups = dedupState.groups.filter(g => g.group_id !== groupId);
+        delete dedupState.agreedGroups[groupId];
+        delete dedupState.selectedTargets[groupId];
+        showToast(`Đã tách "${patientName}" (${patientCode}) khỏi nhóm. Nhóm chỉ còn 1 hồ sơ nên đã hoàn tất!`, 'info');
+    } else {
+        showToast(`Đã loại "${patientName}" (${patientCode}) khỏi nhóm trùng. Hồ sơ này được giữ nguyên và KHÔNG bị gộp!`, 'success');
+    }
+
+    refreshDedupStatsAndCounters();
+    renderDedupGroups();
+}
+
+function dismissDedupGroup(groupId) {
+    const group = dedupState.groups.find(g => g.group_id === groupId);
+    if (!group) return;
+
+    const groupName = group.name;
+
+    try {
+        const dismissed = getDedupDismissedGroups();
+        const key = group.norm_name || group.name.toLowerCase().trim();
+        if (!dismissed.includes(key)) {
+            dismissed.push(key);
+            localStorage.setItem('nibi_dismissed_groups', JSON.stringify(dismissed));
+        }
+    } catch (e) {}
+
+    dedupState.groups = dedupState.groups.filter(g => g.group_id !== groupId);
+    delete dedupState.agreedGroups[groupId];
+    delete dedupState.selectedTargets[groupId];
+
+    showToast(`Đã bỏ qua nhóm "${groupName}" (không trùng lặp). Toàn bộ hồ sơ được giữ nguyên!`, 'info');
+
+    refreshDedupStatsAndCounters();
+    renderDedupGroups();
+}
+
+function restoreDismissedGroups() {
+    localStorage.removeItem('nibi_dismissed_groups');
+    localStorage.removeItem('nibi_excluded_patients');
+    showToast('Đã khôi phục toàn bộ các nhóm và hồ sơ đã bỏ qua!', 'success');
+    openDuplicatePatientsModal();
+}
+
 async function executeSingleGroupMerge(groupId) {
     const group = dedupState.groups.find(g => g.group_id === groupId);
     if (!group) return;
@@ -4859,32 +5022,7 @@ async function executeSingleGroupMerge(groupId) {
         delete dedupState.agreedGroups[groupId];
         delete dedupState.selectedTargets[groupId];
 
-        const total = dedupState.groups.length;
-        const high = dedupState.groups.filter(g => g.match_level === 'high').length;
-        const med = dedupState.groups.filter(g => g.match_level === 'medium').length;
-        const low = dedupState.groups.filter(g => g.match_level === 'low').length;
-
-        document.getElementById('dedup-stat-total').textContent = total;
-        document.getElementById('dedup-stat-high').textContent = high;
-        document.getElementById('dedup-stat-medium').textContent = med;
-        document.getElementById('dedup-stat-low').textContent = low;
-
-        document.getElementById('dedup-modal-badge').textContent = `${total} nhóm`;
-        document.getElementById('dedup-filter-count-all').textContent = total;
-        document.getElementById('dedup-filter-count-high').textContent = high;
-        document.getElementById('dedup-filter-count-medium').textContent = med;
-        document.getElementById('dedup-filter-count-low').textContent = low;
-
-        const badge = document.getElementById('duplicate-patients-badge');
-        if (badge) {
-            if (total > 0) {
-                badge.textContent = total;
-                badge.classList.remove('hidden');
-            } else {
-                badge.classList.add('hidden');
-            }
-        }
-
+        refreshDedupStatsAndCounters();
         renderDedupGroups();
         loadPatients(state.patients.offset);
     } catch (e) {
