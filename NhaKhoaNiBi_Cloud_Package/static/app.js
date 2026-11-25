@@ -2954,7 +2954,10 @@ async function switchAdminSubTab(sub) {
     if (sub === 'reports') await loadReports();
     else if (sub === 'users') await loadUsers();
     else if (sub === 'settings') await loadClinicSettings();
-    else if (sub === 'backup') await loadAuditLogs();
+    else if (sub === 'backup') {
+        await loadAuditLogs();
+        await loadBackupStatus();
+    }
 }
 
 // ───────── Admin Sub-Tab: Users Management ─────────
@@ -3445,10 +3448,77 @@ async function downloadNibiExcelFull() {
     }
 }
 
+// ==================== DATABASE BACKUP & RESTORE MODULE ====================
+let cachedBackupStatus = null;
+
+async function loadBackupStatus() {
+    if (!state.user || state.user.role !== 'admin') return;
+    const timeEl = document.getElementById('backup-stat-time');
+    const sizeEl = document.getElementById('backup-stat-size');
+    if (timeEl) timeEl.textContent = 'Đang kiểm tra...';
+
+    try {
+        const res = await api('/api/admin/backup/status');
+        cachedBackupStatus = res;
+
+        if (timeEl) {
+            if (res.exists && res.last_backup_time) {
+                timeEl.textContent = res.last_backup_time;
+            } else {
+                timeEl.textContent = 'Chưa có bản sao lưu nào';
+            }
+        }
+
+        if (sizeEl) {
+            if (res.exists) {
+                const patientCount = res.counts?.patients ?? '--';
+                sizeEl.textContent = `${res.size_kb} KB (${patientCount} bệnh nhân)`;
+            } else {
+                sizeEl.textContent = 'Chưa tạo';
+            }
+        }
+
+        const latestDescEl = document.getElementById('restore-modal-latest-desc');
+        if (latestDescEl) {
+            if (res.exists) {
+                latestDescEl.textContent = `Bản sao lưu gần nhất: ${res.last_backup_time || ''} (${res.size_kb} KB, ${res.counts?.patients || 0} bệnh nhân)`;
+            } else {
+                latestDescEl.textContent = 'Hiện chưa có bản sao lưu nào trên máy chủ. Bạn có thể sao lưu ngay hoặc tải file từ máy tính.';
+            }
+        }
+    } catch (e) {
+        if (timeEl) timeEl.textContent = 'Lỗi kết nối';
+        if (sizeEl) sizeEl.textContent = '--';
+    }
+}
+
+async function runManualBackupNow() {
+    if (!state.user || state.user.role !== 'admin') return;
+    const btn = document.getElementById('btn-manual-backup');
+    if (btn) {
+        btn.setAttribute('disabled', 'true');
+        btn.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i><span>Đang sao lưu...</span>';
+    }
+
+    try {
+        showToast('Đang tiến hành sao lưu toàn bộ cơ sở dữ liệu...', 'info');
+        const res = await api('/api/admin/backup/run', { method: 'POST' });
+        showToast(`Sao lưu thành công! File: ${res.filename} (${res.size_kb} KB). Đã xóa các bản cũ.`, 'success');
+        await loadBackupStatus();
+    } catch (e) {
+        showToast('Lỗi khi sao lưu: ' + e.message, 'error');
+    } finally {
+        if (btn) {
+            btn.removeAttribute('disabled');
+            btn.innerHTML = '<i class="fa-solid fa-bolt-lightning text-amber-300"></i><span>Sao Lưu Ngay Lập Tức</span>';
+        }
+    }
+}
+
 async function downloadBackupDatabase() {
     try {
-        showToast('Đang tạo và tải file sao lưu CSDL (.db)...', 'info');
-        const resp = await fetch('/api/admin/backup.db', {
+        showToast('Đang tải file sao lưu CSDL (.db)...', 'info');
+        const resp = await fetch('/api/admin/backup/download', {
             headers: { 'Authorization': `Bearer ${state.token}` }
         });
         if (!resp.ok) {
@@ -3460,17 +3530,135 @@ async function downloadBackupDatabase() {
         const a = document.createElement('a');
         a.href = url;
         const today = new Date().toISOString().split('T')[0];
-        a.download = `NiBi_Dental_Backup_${today}.db`;
+        a.download = `NiBi_Full_Backup_${today}.db`;
         document.body.appendChild(a);
         a.click();
         a.remove();
         window.URL.revokeObjectURL(url);
-        showToast('Tải file sao lưu CSDL thành công!', 'success');
+        showToast('Tải file sao lưu CSDL thành công! Bạn có thể lưu giữ an toàn trên máy tính hoặc USB.', 'success');
     } catch (e) {
-        if (state.token) {
-            window.location.href = `/api/admin/backup.db?token=${encodeURIComponent(state.token)}`;
+        showToast(e.message || 'Lỗi khi tải sao lưu', 'error');
+    }
+}
+
+function openRestoreBackupModal() {
+    if (!state.user || state.user.role !== 'admin') {
+        showToast('Chỉ Quản trị viên (Admin) mới có quyền khôi phục CSDL', 'error');
+        return;
+    }
+    const modal = document.getElementById('restore-backup-modal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+
+    const pw = document.getElementById('restore-admin-password');
+    if (pw) pw.value = '';
+
+    const fileInput = document.getElementById('restore-file-input');
+    if (fileInput) fileInput.value = '';
+
+    const latestRadio = document.querySelector('input[name="restore_mode"][value="latest"]');
+    if (latestRadio) latestRadio.checked = true;
+    toggleRestoreModeUI();
+
+    loadBackupStatus();
+}
+
+function closeRestoreBackupModal() {
+    const modal = document.getElementById('restore-backup-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function toggleRestoreModeUI() {
+    const mode = document.querySelector('input[name="restore_mode"]:checked')?.value || 'latest';
+    const fileInput = document.getElementById('restore-file-input');
+    if (fileInput) {
+        if (mode === 'file') {
+            fileInput.classList.remove('hidden');
         } else {
-            showToast(e.message || 'Lỗi khi tải sao lưu', 'error');
+            fileInput.classList.add('hidden');
+        }
+    }
+}
+
+async function executeDatabaseRestore() {
+    const pwInput = document.getElementById('restore-admin-password');
+    const password = (pwInput?.value || '').trim();
+    if (!password) {
+        showToast('Vui lòng nhập mật khẩu Quản trị viên để xác nhận', 'warning');
+        pwInput?.focus();
+        return;
+    }
+
+    const mode = document.querySelector('input[name="restore_mode"]:checked')?.value || 'latest';
+    const btn = document.getElementById('btn-submit-restore');
+
+    if (mode === 'file') {
+        const fileInput = document.getElementById('restore-file-input');
+        const file = fileInput?.files?.[0];
+        if (!file) {
+            showToast('Vui lòng chọn một file sao lưu (.db hoặc .sqlite) từ máy tính', 'warning');
+            return;
+        }
+
+        const confirmMsg = `CẢNH BÁO: Bạn sắp khôi phục cơ sở dữ liệu từ file "${file.name}". Toàn bộ dữ liệu hiện tại sẽ được nạp lại theo file này. Bạn có chắc chắn không?`;
+        if (!confirm(confirmMsg)) return;
+
+        if (btn) {
+            btn.setAttribute('disabled', 'true');
+            btn.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i><span>Đang nạp file & khôi phục...</span>';
+        }
+
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            try {
+                const base64Data = e.target.result;
+                const res = await api('/api/admin/backup/restore-file', {
+                    method: 'POST',
+                    body: {
+                        password: password,
+                        filename: file.name,
+                        file_base64: base64Data
+                    }
+                });
+                showToast(`Khôi phục thành công! Đã phục hồi ${res.restored_counts?.patients || 0} bệnh nhân, ${res.restored_counts?.treatments || 0} đợt điều trị.`, 'success');
+                closeRestoreBackupModal();
+                await loadDashboard();
+                await loadBackupStatus();
+            } catch (err) {
+                showToast('Lỗi khi khôi phục từ file: ' + err.message, 'error');
+            } finally {
+                if (btn) {
+                    btn.removeAttribute('disabled');
+                    btn.innerHTML = '<i class="fa-solid fa-rotate-left"></i><span>Xác Nhận Khôi Phục</span>';
+                }
+            }
+        };
+        reader.readAsDataURL(file);
+    } else {
+        const confirmMsg = 'CẢNH BÁO: Bạn sắp khôi phục cơ sở dữ liệu từ bản sao lưu gần nhất trên máy chủ. Toàn bộ dữ liệu sẽ được nạp lại. Bạn có chắc chắn muốn tiếp tục?';
+        if (!confirm(confirmMsg)) return;
+
+        if (btn) {
+            btn.setAttribute('disabled', 'true');
+            btn.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i><span>Đang khôi phục...</span>';
+        }
+
+        try {
+            const res = await api('/api/admin/backup/restore', {
+                method: 'POST',
+                body: { password: password, from_latest: true }
+            });
+            showToast(`Khôi phục hoàn toàn thành công từ bản sao lưu! Phục hồi ${res.restored_counts?.patients || 0} bệnh nhân, ${res.restored_counts?.treatments || 0} đợt điều trị.`, 'success');
+            closeRestoreBackupModal();
+            await loadDashboard();
+            await loadBackupStatus();
+        } catch (err) {
+            showToast('Lỗi khi khôi phục: ' + err.message, 'error');
+        } finally {
+            if (btn) {
+                btn.removeAttribute('disabled');
+                btn.innerHTML = '<i class="fa-solid fa-rotate-left"></i><span>Xác Nhận Khôi Phục</span>';
+            }
         }
     }
 }

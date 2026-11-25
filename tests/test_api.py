@@ -749,6 +749,47 @@ class ApiTest(unittest.TestCase):
         actions = [item["action"] for item in audit_res.json()["items"]]
         self.assertIn("patient_merge", actions)
 
+    def test_85_backup_and_restore(self):
+        # 1. Staff forbidden
+        self.assertEqual(self.c.get("/api/admin/backup/status", headers=self.staff).status_code, 403)
+        self.assertEqual(self.c.post("/api/admin/backup/run", headers=self.staff).status_code, 403)
+        self.assertEqual(self.c.get("/api/admin/backup/download", headers=self.staff).status_code, 403)
+        self.assertEqual(self.c.post("/api/admin/backup/restore", headers=self.staff, json={"password": "123"}).status_code, 403)
+
+        # 2. Admin creates backup
+        res = self.c.post("/api/admin/backup/run", headers=self.admin)
+        self.assertEqual(res.status_code, 200)
+        d = res.json()
+        self.assertTrue(d["ok"])
+        self.assertIn("NiBi_Backup_", d["filename"])
+        self.assertGreater(d["size_kb"], 0)
+        self.assertGreaterEqual(d["counts"].get("patients", 0), 1)
+
+        # 3. Admin checks status
+        stat_res = self.c.get("/api/admin/backup/status", headers=self.admin)
+        self.assertEqual(stat_res.status_code, 200)
+        stat = stat_res.json()
+        self.assertTrue(stat["ok"])
+        self.assertTrue(stat["auto_backup"]["enabled"])
+        self.assertEqual(stat["auto_backup"]["schedule"], "Tự động 1 tuần 1 lần vào Thứ Hai")
+        self.assertTrue(stat["exists"])
+
+        # 4. Admin downloads backup
+        dl_res = self.c.get("/api/admin/backup/download", headers=self.admin)
+        self.assertEqual(dl_res.status_code, 200)
+        self.assertGreater(len(dl_res.content), 1000)
+
+        # 5. Restore with wrong password rejected
+        wrong_res = self.c.post("/api/admin/backup/restore", headers=self.admin, json={"password": "wrongpassword"})
+        self.assertEqual(wrong_res.status_code, 403)
+
+        # 6. Restore with correct password
+        restore_res = self.c.post("/api/admin/backup/restore", headers=self.admin, json={"password": "123456"})
+        self.assertEqual(restore_res.status_code, 200)
+        r_data = restore_res.json()
+        self.assertTrue(r_data["ok"])
+        self.assertGreaterEqual(r_data["restored_counts"].get("patients", 0), 1)
+
     def test_99_logout_invalidates_token(self):
         h = self.login("letan", "abc123")
         self.assertEqual(self.c.post("/api/auth/logout", headers=h).status_code, 200)

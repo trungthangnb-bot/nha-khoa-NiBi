@@ -1,10 +1,13 @@
 """Nha khoa NiBi - BS. Thắng : FastAPI backend."""
+import asyncio
+import base64
 import calendar
 import contextlib
 import csv
 import datetime as dt
 import io
 import json
+import logging
 import os
 import re
 import sqlite3
@@ -21,8 +24,11 @@ from . import db as dbm
 from .db import APPT_KINDS, APPT_STATUSES, BRANCHES, CATEGORIES, METHODS, SUPPLY_CATEGORIES, SUPPLY_UNITS, db, patient_search_text
 from .excel_exporter import generate_nibi_excel_workbook
 from .ai_assistant import parse_intake_with_ai, answer_clinic_query, parse_supply_with_ai
+from .backup import BACKUP_DIR, check_and_run_weekly_backup, create_full_backup, get_backup_info, get_latest_backup_path, restore_full_backup, start_backup_scheduler
 from .security import Limiter, hash_secret, new_token, token_digest, verify_secret
 from .textutil import clean, strip_accents
+
+logger = logging.getLogger("nibi")
 
 STATIC_DIR = os.path.join(dbm.BASE_DIR, "static")
 login_limiter = Limiter(max_fails=6, window=300, lock_seconds=300)
@@ -37,7 +43,13 @@ async def lifespan(_app):
     dbm.init_db()
     with db() as conn:
         conn.execute("DELETE FROM sessions WHERE expires_at < ?", (time.time(),))
+    try:
+        check_and_run_weekly_backup()
+    except Exception as e:
+        logger.warning("Startup backup check: %s", e)
+    scheduler_task = asyncio.create_task(start_backup_scheduler())
     yield
+    scheduler_task.cancel()
 
 
 app = FastAPI(title="NiBi Dental", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
@@ -1713,12 +1725,102 @@ def api_ai_chat(data: AiChatIn, user=Depends(current_user)):
         }
 
 
+class RestoreBackupIn(BaseModel):
+    password: str = Field(max_length=200)
+    from_latest: bool = True
+
+
+@app.get("/api/admin/backup/status")
+def api_backup_status(user=Depends(admin_only)):
+    info = get_backup_info()
+    return {
+        "ok": True,
+        "auto_backup": {
+            "enabled": True,
+            "schedule": "Tự động 1 tuần 1 lần vào Thứ Hai",
+            "rotation": "Tự động xóa bản sao lưu cũ, chỉ giữ 1 bản mới nhất"
+        },
+        **info
+    }
+
+
+@app.post("/api/admin/backup/run")
+def api_run_backup(user=Depends(admin_only)):
+    try:
+        info = create_full_backup(reason="manual", triggered_by=user.get("username", "admin"))
+        with db() as conn:
+            audit(conn, user, "database_backup", "system", 0, summary=f"Sao lưu cơ sở dữ liệu: {info['filename']} ({info['size_kb']} KB)")
+        return {"ok": True, **info}
+    except Exception as e:
+        logger.exception("Backup execution failed: %s", e)
+        raise HTTPException(500, f"Lỗi khi thực hiện sao lưu: {e}")
+
+
+@app.get("/api/admin/backup/download")
 @app.get("/api/admin/backup.db")
 def download_backup_db(user=Depends(admin_only)):
-    if not os.path.exists(dbm.DB_PATH):
-        raise HTTPException(404, "Không tìm thấy file CSDL")
-    filename = f"NiBi_Dental_Backup_{dt.date.today().isoformat()}.db"
-    return FileResponse(dbm.DB_PATH, filename=filename, media_type="application/octet-stream")
+    latest_path = get_latest_backup_path()
+    if not latest_path or not os.path.exists(latest_path):
+        info = create_full_backup(reason="download_fallback", triggered_by=user.get("username", "admin"))
+        latest_path = os.path.join(BACKUP_DIR, info["filename"])
+
+    filename = os.path.basename(latest_path)
+    return FileResponse(latest_path, filename=filename, media_type="application/octet-stream")
+
+
+@app.post("/api/admin/backup/restore")
+def api_restore_backup(data: RestoreBackupIn, user=Depends(admin_only)):
+    with db() as conn:
+        check_admin_password(conn, user, data.password)
+
+    latest_path = get_latest_backup_path()
+    if not latest_path or not os.path.exists(latest_path):
+        raise HTTPException(404, "Không tìm thấy bản sao lưu nào trên máy chủ để khôi phục")
+
+    try:
+        restored_counts = restore_full_backup(latest_path, user)
+        return {"ok": True, "restored_counts": restored_counts, "filename": os.path.basename(latest_path)}
+    except Exception as e:
+        logger.exception("Restore failed: %s", e)
+        raise HTTPException(500, f"Lỗi khi khôi phục dữ liệu: {e}")
+
+
+class RestoreUploadIn(BaseModel):
+    password: str = Field(max_length=200)
+    file_base64: str
+    filename: Optional[str] = "backup.db"
+
+
+@app.post("/api/admin/backup/restore-file")
+def api_restore_backup_file(data: RestoreUploadIn, user=Depends(admin_only)):
+    with db() as conn:
+        check_admin_password(conn, user, data.password)
+
+    raw_b64 = data.file_base64
+    if "," in raw_b64:
+        raw_b64 = raw_b64.split(",", 1)[1]
+
+    try:
+        content = base64.b64decode(raw_b64)
+    except Exception as e:
+        raise HTTPException(422, f"Dữ liệu file không hợp lệ: {e}")
+
+    temp_path = os.path.join(BACKUP_DIR, f"temp_upload_restore_{int(time.time())}.db")
+    try:
+        with open(temp_path, "wb") as f:
+            f.write(content)
+
+        restored_counts = restore_full_backup(temp_path, user)
+        return {"ok": True, "restored_counts": restored_counts, "filename": data.filename}
+    except Exception as e:
+        logger.exception("Restore from file failed: %s", e)
+        raise HTTPException(500, f"Lỗi khi khôi phục từ file tải lên: {e}")
+    finally:
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
 
 
 @app.get("/api/admin/export-excel.xlsx")

@@ -1,0 +1,23 @@
+{
+  "exists": true,
+  "filename": "NiBi_Backup_2026-11-25_212738.db",
+  "last_backup_time": "2026-11-25 21:27:38",
+  "last_backup_date": "2026-11-25",
+  "size_kb": 144.0,
+  "reason": "manual",
+  "triggered_by": "admin",
+  "counts": {
+    "users": 3,
+    "settings": 8,
+    "patients": 19,
+    "treatments": 13,
+    "payments": 13,
+    "appointments": 28,
+    "audit_logs": 61,
+    "supplies": 2,
+    "supply_transactions": 4
+  },
+  "deleted_old_backups": [
+    "NiBi_Backup_2026-11-25_212436.db"
+  ]
+}

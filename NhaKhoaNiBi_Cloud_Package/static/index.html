@@ -911,22 +911,68 @@
                         </button>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <!-- Safe Database Backup -->
-                        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-3">
-                            <div>
-                                <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg mb-2">
-                                    <i class="fa-solid fa-database"></i>
+                    <!-- Safe Database Backup & Automatic Weekly Schedule -->
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-100">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg flex-shrink-0">
+                                    <i class="fa-solid fa-cloud-arrow-up"></i>
                                 </div>
-                                <h4 class="font-extrabold text-slate-800 text-sm">Sao Lưu File CSDL Gốc (.db)</h4>
-                                <p class="text-xs text-slate-500 mt-1">Tải về toàn bộ cơ sở dữ liệu SQLite (.db) bao gồm tất cả bảng dữ liệu. File này dùng cho kỹ thuật viên hoặc máy chủ phục hồi dữ liệu khi cần.</p>
+                                <div>
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <h4 class="font-extrabold text-slate-800 text-sm">Hệ Thống Tự Động Sao Lưu Hàng Tuần (Thứ 2) & Khôi Phục Dữ Liệu</h4>
+                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                                            <i class="fa-solid fa-circle-check text-emerald-600"></i>
+                                            <span>Tự động thứ 2 hàng tuần</span>
+                                        </span>
+                                    </div>
+                                    <p class="text-xs text-slate-500 mt-0.5">Bản sao lưu chứa 100% dữ liệu phòng khám (hồ sơ, điều trị, công nợ, kho thuốc). Tự động dọn dẹp bản cũ khi có bản mới để chống nặng máy.</p>
+                                </div>
                             </div>
-                            <button onclick="downloadBackupDatabase()" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 flex items-center justify-center gap-2 transition">
-                                <i class="fa-solid fa-download"></i>
-                                <span>Tải file sao lưu CSDL (.db)</span>
-                            </button>
+                            <div class="flex items-center gap-2">
+                                <button type="button" onclick="loadBackupStatus()" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 border border-slate-200 transition" title="Làm mới trạng thái">
+                                    <i class="fa-solid fa-rotate-right mr-1"></i><span>Kiểm tra</span>
+                                </button>
+                            </div>
                         </div>
 
+                        <!-- Info grid -->
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 text-xs">
+                            <div>
+                                <span class="text-slate-400 block text-[11px] font-semibold uppercase">Lần sao lưu gần nhất</span>
+                                <span id="backup-stat-time" class="font-bold text-slate-800 text-sm">Đang tải...</span>
+                            </div>
+                            <div>
+                                <span class="text-slate-400 block text-[11px] font-semibold uppercase">Dung lượng & Trạng thái</span>
+                                <span id="backup-stat-size" class="font-bold text-blue-700 text-sm">--</span>
+                            </div>
+                            <div>
+                                <span class="text-slate-400 block text-[11px] font-semibold uppercase">Cơ chế lưu trữ</span>
+                                <span class="font-bold text-slate-700 text-xs">Giữ 1 bản mới nhất (Tự xóa bản cũ)</span>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="flex flex-col sm:flex-row items-center gap-2.5 pt-1">
+                            <button type="button" onclick="runManualBackupNow()" id="btn-manual-backup"
+                                    class="w-full sm:w-auto px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 flex items-center justify-center gap-2 transition active:scale-95">
+                                <i class="fa-solid fa-bolt-lightning text-amber-300"></i>
+                                <span>Sao Lưu Ngay Lập Tức</span>
+                            </button>
+                            <button type="button" onclick="downloadBackupDatabase()"
+                                    class="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold border border-slate-200 flex items-center justify-center gap-2 transition active:scale-95">
+                                <i class="fa-solid fa-download text-blue-600"></i>
+                                <span>Tải Bản Sao Lưu Về Máy (.db)</span>
+                            </button>
+                            <button type="button" onclick="openRestoreBackupModal()"
+                                    class="w-full sm:w-auto px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition ml-auto active:scale-95">
+                                <i class="fa-solid fa-rotate-left text-rose-600"></i>
+                                <span>Khôi Phục Dữ Liệu Từ Bản Sao Lưu</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-1 gap-4">
                         <!-- Data Export to CSV -->
                         <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-3">
                             <div>
@@ -2741,6 +2787,77 @@
         </div>
     </div>
 
+    <!-- ==================== RESTORE BACKUP MODAL ==================== -->
+    <div id="restore-backup-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-3 md:p-4 overflow-y-auto">
+        <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-100 overflow-hidden my-auto flex flex-col animate-slide-up">
+            <!-- Header -->
+            <div class="bg-gradient-to-r from-rose-600 to-rose-800 px-5 py-4 text-white flex items-center justify-between flex-shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
+                        <i class="fa-solid fa-rotate-left text-rose-100 text-sm"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-base">Khôi Phục Cơ Sở Dữ Liệu</h3>
+                        <p class="text-rose-100 text-xs">Phục hồi lại toàn bộ hệ thống từ bản sao lưu</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeRestoreBackupModal()" class="text-white/70 hover:text-white p-1 rounded-lg hover:bg-white/10 transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div class="p-5 space-y-4 text-xs">
+                <!-- Danger Warning Alert -->
+                <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 flex items-start gap-2.5">
+                    <i class="fa-solid fa-triangle-exclamation text-amber-600 text-base mt-0.5"></i>
+                    <div class="leading-relaxed">
+                        <b>Cảnh báo quan trọng:</b> Quá trình khôi phục sẽ nạp lại toàn bộ dữ liệu (bệnh nhân, điều trị, công nợ, kho thuốc) từ file sao lưu. Hãy đảm bảo bạn chọn đúng bản sao lưu mong muốn.
+                    </div>
+                </div>
+
+                <!-- Restore Source Choice -->
+                <div>
+                    <label class="block font-bold uppercase text-slate-600 mb-1.5">Nguồn Khôi Phục</label>
+                    <div class="space-y-2">
+                        <label class="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 cursor-pointer transition">
+                            <input type="radio" name="restore_mode" value="latest" checked onchange="toggleRestoreModeUI()" class="mt-0.5 text-rose-600">
+                            <div>
+                                <span class="font-bold text-slate-800 block">Khôi phục từ bản sao lưu mới nhất trên máy chủ</span>
+                                <span id="restore-modal-latest-desc" class="text-slate-500 text-[11px]">Đang kiểm tra thông tin bản sao lưu...</span>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 cursor-pointer transition">
+                            <input type="radio" name="restore_mode" value="file" onchange="toggleRestoreModeUI()" class="mt-0.5 text-rose-600">
+                            <div class="w-full">
+                                <span class="font-bold text-slate-800 block">Tải lên file sao lưu (.db) từ máy tính</span>
+                                <span class="text-slate-500 text-[11px] block mb-1.5">Dùng khi máy chủ bị mất dữ liệu và bạn muốn khôi phục từ file đã tải về trước đó.</span>
+                                <input type="file" id="restore-file-input" accept=".db,.sqlite" class="hidden text-xs file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-300">
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Admin Password Confirmation -->
+                <div>
+                    <label class="block font-bold uppercase text-slate-600 mb-1">Mật Khẩu Quản Trị Viên (Admin)</label>
+                    <p class="text-[11px] text-slate-400 mb-1.5">Nhập mật khẩu tài khoản Admin để xác nhận thao tác khôi phục.</p>
+                    <input type="password" id="restore-admin-password" placeholder="Nhập mật khẩu admin..."
+                           class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-semibold focus:bg-white focus:border-rose-500 outline-none">
+                </div>
+
+                <!-- Actions -->
+                <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                    <button type="button" onclick="closeRestoreBackupModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition">Hủy bỏ</button>
+                    <button type="button" id="btn-submit-restore" onclick="executeDatabaseRestore()"
+                            class="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-600/25 transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-rotate-left"></i>
+                        <span>Xác Nhận Khôi Phục</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- AI FLOATING ACTION BUTTON (TOGGLE) -->
     <button id="ai-chat-toggle-btn" type="button" onclick="toggleAiChatDrawer()"
             class="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-30 flex items-center gap-2 px-3.5 py-3 rounded-full bg-gradient-to-r from-indigo-600 via-indigo-700 to-teal-600 text-white shadow-xl shadow-indigo-600/30 hover:shadow-indigo-600/50 hover:scale-105 active:scale-95 transition-all group">
@@ -2755,6 +2872,6 @@
     <div id="toast-container" class="fixed bottom-20 md:bottom-6 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-sm"></div>
 
     <!-- App JavaScript -->
-    <script src="/static/app.js?v=ai2.4-dedup-exclude"></script>
+    <script src="/static/app.js?v=ai2.5-auto-backup"></script>
 </body>
 </html>
