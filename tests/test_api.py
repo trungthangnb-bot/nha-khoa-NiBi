@@ -673,6 +673,82 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(unpaid[0]["debt"], 1000000)
         self.assertEqual(unpaid[0]["patient_name"], "BN Recon Test")
 
+    def test_84_patient_duplicate_detection_and_merge(self):
+        # Create duplicate patients
+        p1 = self.new_patient("Nguyễn Văn Trùng Test", phone="0988111222", yob=1992, address="Xã Ninh Vân",
+                              force=True, first_treatment={
+                                  "procedure": "Khám và hàn răng R36", "category": "Tổng quát", "cost": 300000, "paid": 300000
+                              })
+
+        p2 = self.new_patient("Nguyễn Văn Trùng Test", phone="0988111222", yob=1992, address="Xã Ninh Vân",
+                              force=True, first_treatment={
+                                  "procedure": "Nhổ răng R48", "category": "Nhổ răng", "cost": 1000000, "paid": 500000
+                              })
+
+        p3 = self.new_patient("Nguyễn Văn Trùng Test", phone="", yob=1992, address="Xã Ninh Vân", force=True)
+
+        # Add an appointment to p3
+        appt_res = self.c.post("/api/appointments", headers=self.staff, json={
+            "patient_id": p3["id"], "appt_date": iso(TODAY + dt.timedelta(days=3)), "appt_time": "09:00",
+            "branch": "Ninh Vân", "kind": "tai_kham", "reason": "Hẹn kiểm tra lại"
+        })
+        self.assertEqual(appt_res.status_code, 200)
+
+        # 1. Staff forbidden
+        self.assertEqual(self.c.get("/api/admin/patients/duplicates", headers=self.staff).status_code, 403)
+        self.assertEqual(self.c.post("/api/admin/patients/merge", headers=self.staff,
+                                     json={"target_id": p1["id"], "source_ids": [p2["id"]]}).status_code, 403)
+
+        # 2. Admin duplicate scan
+        dup_res = self.c.get("/api/admin/patients/duplicates", headers=self.admin)
+        self.assertEqual(dup_res.status_code, 200)
+        dup_data = dup_res.json()
+        self.assertGreaterEqual(dup_data["total_groups"], 1)
+
+        test_group = next((g for g in dup_data["groups"] if "nguyen van trung test" in g["norm_name"]), None)
+        self.assertIsNotNone(test_group, "Duplicate group must be found")
+        self.assertEqual(test_group["match_level"], "high")
+        self.assertEqual(len(test_group["patients"]), 3)
+
+        # 3. Single merge p2 into p1
+        merge_res = self.c.post("/api/admin/patients/merge", headers=self.admin, json={
+            "target_id": p1["id"], "source_ids": [p2["id"]]
+        })
+        self.assertEqual(merge_res.status_code, 200)
+        self.assertEqual(merge_res.json()["merged_sources_count"], 1)
+
+        # p2 is deleted
+        self.assertEqual(self.c.get(f"/api/patients/{p2['id']}", headers=self.staff).status_code, 404)
+
+        # p1 now has treatments from both p1 and p2
+        detail1 = self.c.get(f"/api/patients/{p1['id']}", headers=self.staff).json()
+        self.assertGreaterEqual(len(detail1["treatments"]), 2)
+        # Total billed: 300k + 1000k = 1300k; paid: 300k + 500k = 800k; debt: 500k
+        self.assertEqual(detail1["totals"]["billed"], 1300000)
+        self.assertEqual(detail1["totals"]["paid"], 800000)
+        self.assertEqual(detail1["totals"]["debt"], 500000)
+
+        # 4. Batch merge p3 into p1
+        batch_res = self.c.post("/api/admin/patients/batch-merge", headers=self.admin, json={
+            "merges": [{"target_id": p1["id"], "source_ids": [p3["id"]]}]
+        })
+        self.assertEqual(batch_res.status_code, 200)
+        self.assertEqual(batch_res.json()["merged_groups_count"], 1)
+
+        # p3 is deleted
+        self.assertEqual(self.c.get(f"/api/patients/{p3['id']}", headers=self.staff).status_code, 404)
+
+        # p1 now has the appointment originally created for p3
+        detail1_after = self.c.get(f"/api/patients/{p1['id']}", headers=self.staff).json()
+        self.assertGreaterEqual(len(detail1_after["appointments"]), 1)
+        self.assertTrue(any(a["reason"] == "Hẹn kiểm tra lại" for a in detail1_after["appointments"]))
+
+        # 5. Check audit logs
+        audit_res = self.c.get("/api/admin/audit?scope=all", headers=self.admin)
+        self.assertEqual(audit_res.status_code, 200)
+        actions = [item["action"] for item in audit_res.json()["items"]]
+        self.assertIn("patient_merge", actions)
+
     def test_99_logout_invalidates_token(self):
         h = self.login("letan", "abc123")
         self.assertEqual(self.c.post("/api/auth/logout", headers=h).status_code, 200)

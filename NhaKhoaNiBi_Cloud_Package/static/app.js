@@ -998,6 +998,10 @@ async function loadPatients(offset = 0) {
         state.patients.total = data.total;
         state.patients.offset = offset;
 
+        if (state.user && state.user.role === 'admin') {
+            checkDuplicatePatientsCount();
+        }
+
         document.getElementById('patients-count').textContent = data.total;
         const pageNum = Math.floor(offset / limit) + 1;
         const totalPages = Math.ceil(data.total / limit) || 1;
@@ -4519,4 +4523,416 @@ async function openSupplyTransactionsModal(supplyId = null) {
 function closeSupplyTransactionsModal() {
     const modal = document.getElementById('supply-transactions-modal');
     if (modal) modal.classList.add('hidden');
+}
+
+// ==================== DUPLICATE PATIENTS & MERGE MODULE ====================
+const dedupState = {
+    groups: [],
+    filter: 'all',
+    selectedTargets: {}, // { groupId: targetPatientId }
+    agreedGroups: {},    // { groupId: boolean }
+    loading: false
+};
+
+async function checkDuplicatePatientsCount() {
+    if (!state.user || state.user.role !== 'admin') return;
+    try {
+        const data = await api('/api/admin/patients/duplicates');
+        const badge = document.getElementById('duplicate-patients-badge');
+        if (badge) {
+            if (data.total_groups > 0) {
+                badge.textContent = data.total_groups;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+    } catch (e) {
+        // Silently catch if not admin or network offline
+    }
+}
+
+async function openDuplicatePatientsModal() {
+    if (!state.user || state.user.role !== 'admin') {
+        showToast('Chỉ Quản trị viên (Admin) mới có quyền rà soát và gộp hồ sơ', 'error');
+        return;
+    }
+    const modal = document.getElementById('duplicate-patients-modal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+
+    const loading = document.getElementById('dedup-loading');
+    const empty = document.getElementById('dedup-empty');
+    const list = document.getElementById('dedup-groups-list');
+
+    if (loading) loading.classList.remove('hidden');
+    if (empty) empty.classList.add('hidden');
+    if (list) list.innerHTML = '';
+
+    try {
+        const data = await api('/api/admin/patients/duplicates');
+        dedupState.groups = data.groups || [];
+        dedupState.filter = 'all';
+        dedupState.selectedTargets = {};
+        dedupState.agreedGroups = {};
+
+        // Default: target is suggested_target_id, agreed is false (explicit admin confirmation required)
+        dedupState.groups.forEach(g => {
+            dedupState.selectedTargets[g.group_id] = g.suggested_target_id;
+            dedupState.agreedGroups[g.group_id] = false;
+        });
+
+        const total = data.total_groups || 0;
+        const high = data.counts_by_level?.high || 0;
+        const med = data.counts_by_level?.medium || 0;
+        const low = data.counts_by_level?.low || 0;
+
+        document.getElementById('dedup-stat-total').textContent = total;
+        document.getElementById('dedup-stat-high').textContent = high;
+        document.getElementById('dedup-stat-medium').textContent = med;
+        document.getElementById('dedup-stat-low').textContent = low;
+
+        document.getElementById('dedup-modal-badge').textContent = `${total} nhóm`;
+        document.getElementById('dedup-filter-count-all').textContent = total;
+        document.getElementById('dedup-filter-count-high').textContent = high;
+        document.getElementById('dedup-filter-count-medium').textContent = med;
+        document.getElementById('dedup-filter-count-low').textContent = low;
+
+        const badge = document.getElementById('duplicate-patients-badge');
+        if (badge) {
+            if (total > 0) {
+                badge.textContent = total;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+
+        renderDedupGroups();
+    } catch (e) {
+        showToast('Lỗi khi tải danh sách bệnh nhân trùng lặp: ' + e.message, 'error');
+        if (loading) loading.classList.add('hidden');
+    }
+}
+
+function closeDuplicatePatientsModal() {
+    const modal = document.getElementById('duplicate-patients-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function setDedupFilter(filter) {
+    dedupState.filter = filter;
+    ['all', 'high', 'medium', 'low'].forEach(f => {
+        const btn = document.getElementById(`btn-dedup-filter-${f}`);
+        if (!btn) return;
+        if (f === filter) {
+            btn.className = 'px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-800 text-white shadow-sm transition';
+        } else {
+            btn.className = 'px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 transition';
+        }
+    });
+    renderDedupGroups();
+}
+
+function renderDedupGroups() {
+    const loading = document.getElementById('dedup-loading');
+    const empty = document.getElementById('dedup-empty');
+    const list = document.getElementById('dedup-groups-list');
+    if (loading) loading.classList.add('hidden');
+
+    const search = (document.getElementById('dedup-search-input')?.value || '').trim().toLowerCase();
+
+    const filtered = dedupState.groups.filter(g => {
+        if (dedupState.filter !== 'all' && g.match_level !== dedupState.filter) return false;
+        if (search) {
+            const matchName = (g.name || '').toLowerCase().includes(search) || (g.norm_name || '').includes(search);
+            const matchPhone = g.patients.some(p => (p.phone || '').includes(search));
+            const matchCode = g.patients.some(p => (p.code || '').toLowerCase().includes(search));
+            if (!matchName && !matchPhone && !matchCode) return false;
+        }
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        list.innerHTML = '';
+        if (empty) empty.classList.remove('hidden');
+        updateDedupBatchButton();
+        return;
+    }
+
+    if (empty) empty.classList.add('hidden');
+
+    list.innerHTML = filtered.map(g => {
+        const isAgreed = !!dedupState.agreedGroups[g.group_id];
+        const currentTargetId = dedupState.selectedTargets[g.group_id];
+
+        let badgeHtml = '';
+        if (g.match_level === 'high') {
+            badgeHtml = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shadow-sm"><i class="fa-solid fa-circle-check text-emerald-600"></i><span>${escapeHtml(g.match_reason)}</span></span>`;
+        } else if (g.match_level === 'medium') {
+            badgeHtml = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 shadow-sm"><i class="fa-solid fa-triangle-exclamation text-amber-600"></i><span>${escapeHtml(g.match_reason)}</span></span>`;
+        } else {
+            badgeHtml = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-200 text-slate-700 border border-slate-300 flex items-center gap-1 shadow-sm"><i class="fa-solid fa-circle-question text-slate-500"></i><span>${escapeHtml(g.match_reason)}</span></span>`;
+        }
+
+        const patientCardsHtml = g.patients.map(p => {
+            const isTarget = (p.id === currentTargetId);
+            const isSuggested = (p.id === g.suggested_target_id);
+
+            return `
+                <div onclick="onSelectDedupTarget(${g.group_id}, ${p.id})"
+                     class="cursor-pointer relative p-3.5 rounded-xl border-2 transition-all ${isTarget ? 'bg-amber-50/80 border-amber-500 shadow-md ring-2 ring-amber-200/60' : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'}">
+                    <div class="flex items-center justify-between gap-2 mb-2">
+                        <label class="flex items-center gap-2 cursor-pointer select-none" onclick="event.stopPropagation()">
+                            <input type="radio" name="target_group_${g.group_id}" value="${p.id}" ${isTarget ? 'checked' : ''}
+                                   onchange="onSelectDedupTarget(${g.group_id}, ${p.id})"
+                                   class="w-4 h-4 text-amber-600 focus:ring-amber-500">
+                            <span class="text-xs font-bold ${isTarget ? 'text-amber-800' : 'text-slate-700'}">
+                                ${isTarget ? '⭐ Hồ sơ Gốc (Giữ lại)' : 'Chọn giữ hồ sơ này'}
+                            </span>
+                        </label>
+                        <div class="flex items-center gap-1">
+                            ${isSuggested ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-teal-100 text-teal-800 border border-teal-200" title="Gợi ý giữ lại vì có nhiều đợt điều trị nhất">Gợi ý giữ</span>` : ''}
+                            <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-100 text-slate-600">${escapeHtml(p.code || 'BN' + p.id)}</span>
+                        </div>
+                    </div>
+
+                    <div class="space-y-1 text-xs">
+                        <div class="flex items-center justify-between">
+                            <span class="font-extrabold text-sm text-slate-800">${escapeHtml(p.name)}</span>
+                            <span class="text-[11px] font-semibold text-slate-500">${p.branch || 'Chưa rõ CS'}</span>
+                        </div>
+                        <div class="flex items-center gap-2 text-slate-600">
+                            <i class="fa-solid fa-phone text-slate-400 w-3.5 text-center"></i>
+                            <span class="${p.phone ? 'font-semibold text-teal-700' : 'italic text-slate-400'}">${p.phone || 'Chưa có SĐT'}</span>
+                        </div>
+                        <div class="flex items-center gap-2 text-slate-600">
+                            <i class="fa-solid fa-calendar-days text-slate-400 w-3.5 text-center"></i>
+                            <span>${p.yob ? `Năm sinh: <b>${p.yob}</b>` : '<span class="italic text-slate-400">Chưa có năm sinh</span>'}</span>
+                        </div>
+                        <div class="flex items-center gap-2 text-slate-600">
+                            <i class="fa-solid fa-location-dot text-slate-400 w-3.5 text-center"></i>
+                            <span class="truncate ${p.address ? '' : 'italic text-slate-400'}">${p.address ? escapeHtml(p.address) : 'Chưa có địa chỉ'}</span>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 pt-2.5 border-t border-slate-100 grid grid-cols-3 gap-1.5 text-center text-[11px]">
+                        <div class="bg-slate-50 p-1.5 rounded-lg border border-slate-100">
+                            <span class="block text-[10px] text-slate-400 uppercase font-semibold">Đợt khám</span>
+                            <span class="font-bold text-slate-700">${p.treatments_count || 0} lần</span>
+                        </div>
+                        <div class="bg-slate-50 p-1.5 rounded-lg border border-slate-100">
+                            <span class="block text-[10px] text-slate-400 uppercase font-semibold">Phát sinh</span>
+                            <span class="font-bold text-slate-700">${formatVND(p.billed || 0)}</span>
+                        </div>
+                        <div class="${(p.debt || 0) > 0 ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'} p-1.5 rounded-lg border">
+                            <span class="block text-[10px] uppercase font-semibold">Còn nợ</span>
+                            <span class="font-black">${formatVND(p.debt || 0)}</span>
+                        </div>
+                    </div>
+
+                    ${(p.notes || p.medical_history) ? `
+                        <div class="mt-2 text-[10px] text-slate-500 bg-slate-50 p-1.5 rounded-lg border border-slate-100 line-clamp-2">
+                            ${p.medical_history ? `<b>Tiền sử:</b> ${escapeHtml(p.medical_history)} ` : ''}
+                            ${p.notes ? `<b>Ghi chú:</b> ${escapeHtml(p.notes)}` : ''}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div class="bg-white rounded-2xl border ${isAgreed ? 'border-amber-400 ring-2 ring-amber-100' : 'border-slate-200'} shadow-sm overflow-hidden transition-all">
+                <div class="p-3.5 sm:p-4 bg-slate-50/80 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div class="flex items-center gap-3">
+                        <label class="flex items-center gap-2 cursor-pointer bg-white px-3 py-2 rounded-xl border border-slate-200 hover:border-amber-400 transition select-none">
+                            <input type="checkbox" id="dedup-agree-${g.group_id}" ${isAgreed ? 'checked' : ''}
+                                   onchange="onToggleDedupAgree(${g.group_id})"
+                                   class="w-4 h-4 text-amber-600 rounded focus:ring-amber-500">
+                            <span class="text-xs font-bold ${isAgreed ? 'text-amber-800' : 'text-slate-700'}">Đồng ý gộp nhóm này</span>
+                        </label>
+                        <div>
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <h4 class="font-extrabold text-sm sm:text-base text-slate-800">Nhóm #${g.group_id}: ${escapeHtml(g.name)}</h4>
+                                <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-200 text-slate-700">${g.patients.length} hồ sơ trùng</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2 justify-between md:justify-end">
+                        ${badgeHtml}
+                        <button type="button" onclick="executeSingleGroupMerge(${g.group_id})" id="btn-merge-group-${g.group_id}"
+                                ${isAgreed ? '' : 'disabled'}
+                                class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${isAgreed ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}">
+                            <i class="fa-solid fa-code-merge"></i>
+                            <span>Gộp nhóm này</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="p-3.5 sm:p-4">
+                    <p class="text-[11px] text-slate-500 mb-2.5">
+                        <i class="fa-solid fa-hand-pointer text-amber-500 mr-1"></i>
+                        Chọn <b>1 hồ sơ gốc</b> để giữ lại làm mã bệnh nhân chính. Toàn bộ các hồ sơ còn lại sẽ được gộp vào hồ sơ này:
+                    </p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${Math.min(g.patients.length, 3)} gap-3">
+                        ${patientCardsHtml}
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    updateDedupBatchButton();
+}
+
+function onSelectDedupTarget(groupId, patientId) {
+    dedupState.selectedTargets[groupId] = patientId;
+    renderDedupGroups();
+}
+
+function onToggleDedupAgree(groupId) {
+    const chk = document.getElementById(`dedup-agree-${groupId}`);
+    dedupState.agreedGroups[groupId] = chk ? chk.checked : false;
+
+    const btn = document.getElementById(`btn-merge-group-${groupId}`);
+    if (btn) {
+        if (dedupState.agreedGroups[groupId]) {
+            btn.removeAttribute('disabled');
+            btn.className = 'px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white shadow-sm';
+        } else {
+            btn.setAttribute('disabled', 'true');
+            btn.className = 'px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 bg-slate-200 text-slate-400 cursor-not-allowed';
+        }
+    }
+    updateDedupBatchButton();
+}
+
+function updateDedupBatchButton() {
+    const agreedCount = Object.values(dedupState.agreedGroups).filter(Boolean).length;
+    const countEl = document.getElementById('dedup-checked-count');
+    if (countEl) countEl.textContent = agreedCount;
+
+    const batchBtn = document.getElementById('btn-dedup-batch-merge');
+    if (batchBtn) {
+        if (agreedCount > 0) {
+            batchBtn.removeAttribute('disabled');
+            batchBtn.className = 'px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-sm cursor-pointer whitespace-nowrap';
+        } else {
+            batchBtn.setAttribute('disabled', 'true');
+            batchBtn.className = 'px-3.5 py-1.5 bg-slate-300 text-slate-500 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-not-allowed whitespace-nowrap';
+        }
+    }
+}
+
+async function executeSingleGroupMerge(groupId) {
+    const group = dedupState.groups.find(g => g.group_id === groupId);
+    if (!group) return;
+
+    if (!dedupState.agreedGroups[groupId]) {
+        showToast('Vui lòng tích "Đồng ý gộp nhóm này" trước khi thực hiện', 'warning');
+        return;
+    }
+
+    const targetId = dedupState.selectedTargets[groupId];
+    const sourceIds = group.patients.filter(p => p.id !== targetId).map(p => p.id);
+
+    if (!targetId || sourceIds.length === 0) {
+        showToast('Không có hồ sơ phụ cần gộp', 'warning');
+        return;
+    }
+
+    const targetPatient = group.patients.find(p => p.id === targetId);
+
+    const ok = confirm(`Bạn có chắc chắn muốn gộp ${sourceIds.length} hồ sơ phụ vào hồ sơ gốc "${targetPatient.name}" (${targetPatient.code || 'BN' + targetPatient.id})?\n\nToàn bộ lịch sử điều trị, thanh toán & công nợ sẽ được bảo toàn nguyên vẹn.`);
+    if (!ok) return;
+
+    try {
+        const res = await api('/api/admin/patients/merge', {
+            method: 'POST',
+            body: { target_id: targetId, source_ids: sourceIds }
+        });
+
+        showToast(`Đã gộp thành công ${res.merged_sources_count} hồ sơ vào "${res.target_name}" (${res.target_code})!`, 'success');
+
+        dedupState.groups = dedupState.groups.filter(g => g.group_id !== groupId);
+        delete dedupState.agreedGroups[groupId];
+        delete dedupState.selectedTargets[groupId];
+
+        const total = dedupState.groups.length;
+        const high = dedupState.groups.filter(g => g.match_level === 'high').length;
+        const med = dedupState.groups.filter(g => g.match_level === 'medium').length;
+        const low = dedupState.groups.filter(g => g.match_level === 'low').length;
+
+        document.getElementById('dedup-stat-total').textContent = total;
+        document.getElementById('dedup-stat-high').textContent = high;
+        document.getElementById('dedup-stat-medium').textContent = med;
+        document.getElementById('dedup-stat-low').textContent = low;
+
+        document.getElementById('dedup-modal-badge').textContent = `${total} nhóm`;
+        document.getElementById('dedup-filter-count-all').textContent = total;
+        document.getElementById('dedup-filter-count-high').textContent = high;
+        document.getElementById('dedup-filter-count-medium').textContent = med;
+        document.getElementById('dedup-filter-count-low').textContent = low;
+
+        const badge = document.getElementById('duplicate-patients-badge');
+        if (badge) {
+            if (total > 0) {
+                badge.textContent = total;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+
+        renderDedupGroups();
+        loadPatients(state.patients.offset);
+    } catch (e) {
+        showToast('Lỗi khi gộp hồ sơ bệnh nhân: ' + e.message, 'error');
+    }
+}
+
+async function executeBatchMergeSelected() {
+    const agreedGroupIds = Object.keys(dedupState.agreedGroups)
+        .map(Number)
+        .filter(gid => dedupState.agreedGroups[gid]);
+
+    if (agreedGroupIds.length === 0) {
+        showToast('Chưa có nhóm nào được tích đồng ý gộp', 'warning');
+        return;
+    }
+
+    const merges = [];
+    for (const gid of agreedGroupIds) {
+        const group = dedupState.groups.find(g => g.group_id === gid);
+        if (!group) continue;
+        const targetId = dedupState.selectedTargets[gid];
+        const sourceIds = group.patients.filter(p => p.id !== targetId).map(p => p.id);
+        if (targetId && sourceIds.length > 0) {
+            merges.push({ target_id: targetId, source_ids: sourceIds });
+        }
+    }
+
+    if (merges.length === 0) {
+        showToast('Không có hồ sơ nào hợp lệ để gộp', 'warning');
+        return;
+    }
+
+    const totalSources = merges.reduce((sum, m) => sum + m.source_ids.length, 0);
+    const ok = confirm(`Xác nhận gộp hàng loạt ${merges.length} nhóm bệnh nhân trùng lặp (tổng cộng ${totalSources} hồ sơ phụ)?\n\nToàn bộ đợt điều trị và tài chính của từng bệnh nhân sẽ được chuyển trọn vẹn sang hồ sơ gốc.`);
+    if (!ok) return;
+
+    try {
+        const res = await api('/api/admin/patients/batch-merge', {
+            method: 'POST',
+            body: { merges }
+        });
+
+        showToast(`Đã gộp thành công ${res.merged_groups_count} nhóm bệnh nhân trùng lặp!`, 'success');
+
+        openDuplicatePatientsModal();
+        loadPatients(state.patients.offset);
+    } catch (e) {
+        showToast('Lỗi khi gộp hàng loạt: ' + e.message, 'error');
+    }
 }

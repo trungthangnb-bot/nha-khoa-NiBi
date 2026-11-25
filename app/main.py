@@ -598,6 +598,241 @@ def delete_patient(pid: int, data: DeletePatientIn, user=Depends(admin_only)):
     return {"ok": True}
 
 
+# ───────────────────────── duplicate detection & patient merge ─────────────────────────
+class MergePatientIn(BaseModel):
+    target_id: int
+    source_ids: list[int]
+
+
+class BatchMergeItem(BaseModel):
+    target_id: int
+    source_ids: list[int]
+
+
+class BatchMergeIn(BaseModel):
+    merges: list[BatchMergeItem]
+
+
+def find_duplicate_patients(conn):
+    rows = conn.execute(
+        "SELECT id, code, name, phone, yob, address, branch, medical_history, notes, created_at FROM patients ORDER BY id"
+    ).fetchall()
+
+    treat_rows = conn.execute(
+        "SELECT patient_id, COUNT(*) as cnt, COALESCE(SUM(cost), 0) as billed, MAX(visit_date) as last_visit "
+        "FROM treatments GROUP BY patient_id"
+    ).fetchall()
+    treat_stats = {r["patient_id"]: {"cnt": r["cnt"], "billed": r["billed"], "last_visit": r["last_visit"]} for r in treat_rows}
+
+    pay_rows = conn.execute(
+        "SELECT patient_id, COALESCE(SUM(amount), 0) as paid FROM payments GROUP BY patient_id"
+    ).fetchall()
+    pay_stats = {r["patient_id"]: r["paid"] for r in pay_rows}
+
+    groups_by_name = {}
+    for r in rows:
+        p = dict(r)
+        p["treatments_count"] = treat_stats.get(p["id"], {}).get("cnt", 0)
+        p["billed"] = treat_stats.get(p["id"], {}).get("billed", 0)
+        p["paid"] = pay_stats.get(p["id"], 0)
+        p["debt"] = max(p["billed"] - p["paid"], 0)
+        p["last_visit"] = treat_stats.get(p["id"], {}).get("last_visit")
+
+        raw_name = p.get("name") or ""
+        norm_name = re.sub(r"\s+", " ", strip_accents(raw_name).strip().lower())
+        if not norm_name:
+            continue
+        groups_by_name.setdefault(norm_name, []).append(p)
+
+    candidate_groups = []
+    gid = 1
+    for norm_name, members in groups_by_name.items():
+        if len(members) <= 1:
+            continue
+
+        phones = [re.sub(r"\D", "", m.get("phone") or "") for m in members]
+        phones_valid = [ph for ph in phones if len(ph) >= 7]
+        phone_match = len(phones_valid) > 1 and len(phones_valid) != len(set(phones_valid))
+
+        yobs = [m.get("yob") for m in members if m.get("yob")]
+        yob_match = len(yobs) > 1 and len(yobs) != len(set(yobs))
+        common_yob = None
+        if yob_match:
+            for y in yobs:
+                if yobs.count(y) > 1:
+                    common_yob = y
+                    break
+
+        addresses = [re.sub(r"\s+", " ", strip_accents(m.get("address") or "").strip().lower()) for m in members]
+        addresses_valid = [a for a in addresses if len(a) >= 3]
+        address_match = False
+        if len(addresses_valid) > 1:
+            for i in range(len(addresses_valid)):
+                for j in range(i + 1, len(addresses_valid)):
+                    a1, a2 = addresses_valid[i], addresses_valid[j]
+                    if a1 == a2 or a1 in a2 or a2 in a1:
+                        address_match = True
+                        break
+                if address_match:
+                    break
+
+        if phone_match:
+            match_level = "high"
+            match_reason = "Trùng Họ tên & Số điện thoại"
+        elif yob_match and address_match:
+            match_level = "high"
+            match_reason = f"Trùng Họ tên, Năm sinh ({common_yob}) & Địa chỉ"
+        elif yob_match:
+            match_level = "medium"
+            match_reason = f"Trùng Họ tên & Năm sinh ({common_yob})"
+        elif address_match:
+            match_level = "medium"
+            match_reason = "Trùng Họ tên & Địa chỉ"
+        else:
+            match_level = "low"
+            match_reason = "Chỉ trùng Họ tên (Năm sinh/Địa chỉ khác hoặc chưa rõ)"
+
+        # Suggest target: most treatments, then has phone, then has yob, then oldest ID
+        def target_rank(item):
+            return (
+                -item["treatments_count"],
+                0 if item.get("phone") else 1,
+                0 if item.get("yob") else 1,
+                item["id"],
+            )
+
+        sorted_members = sorted(members, key=target_rank)
+        suggested_target_id = sorted_members[0]["id"]
+
+        candidate_groups.append({
+            "group_id": gid,
+            "name": members[0]["name"],
+            "norm_name": norm_name,
+            "match_level": match_level,
+            "match_reason": match_reason,
+            "suggested_target_id": suggested_target_id,
+            "patients": members,
+        })
+        gid += 1
+
+    level_order = {"high": 0, "medium": 1, "low": 2}
+    candidate_groups.sort(key=lambda g: (level_order.get(g["match_level"], 9), -len(g["patients"]), g["norm_name"]))
+    for idx, g in enumerate(candidate_groups, 1):
+        g["group_id"] = idx
+
+    return {
+        "groups": candidate_groups,
+        "total_groups": len(candidate_groups),
+        "total_candidates": sum(len(g["patients"]) for g in candidate_groups),
+        "counts_by_level": {
+            "high": sum(1 for g in candidate_groups if g["match_level"] == "high"),
+            "medium": sum(1 for g in candidate_groups if g["match_level"] == "medium"),
+            "low": sum(1 for g in candidate_groups if g["match_level"] == "low"),
+        },
+    }
+
+
+def execute_patient_merge(conn, user, target_id: int, source_ids: list[int]) -> dict:
+    source_ids = list(dict.fromkeys(int(sid) for sid in source_ids if int(sid) != target_id))
+    if not source_ids:
+        raise HTTPException(422, "Danh sách hồ sơ gộp không hợp lệ")
+
+    target_row = conn.execute("SELECT * FROM patients WHERE id=?", (target_id,)).fetchone()
+    if not target_row:
+        raise HTTPException(404, f"Không tìm thấy bệnh nhân chính (ID {target_id})")
+
+    placeholders = ",".join("?" * len(source_ids))
+    source_rows = conn.execute(f"SELECT * FROM patients WHERE id IN ({placeholders})", source_ids).fetchall()
+    if len(source_rows) != len(source_ids):
+        raise HTTPException(404, "Một số hồ sơ cần gộp không tồn tại hoặc đã được gộp trước đó")
+
+    target = dict(target_row)
+    sources = [dict(r) for r in source_rows]
+
+    new_phone = target.get("phone") or ""
+    new_yob = target.get("yob")
+    new_address = target.get("address") or ""
+    new_branch = target.get("branch") or ""
+
+    med_list = [target["medical_history"].strip()] if target.get("medical_history") and target["medical_history"].strip() else []
+    notes_list = [target["notes"].strip()] if target.get("notes") and target["notes"].strip() else []
+
+    for s in sources:
+        if not new_phone and s.get("phone"):
+            new_phone = s["phone"]
+        if not new_yob and s.get("yob"):
+            new_yob = s["yob"]
+        if not new_address and s.get("address"):
+            new_address = s["address"]
+        if not new_branch and s.get("branch"):
+            new_branch = s["branch"]
+        if s.get("medical_history") and s["medical_history"].strip() and s["medical_history"].strip() not in med_list:
+            med_list.append(s["medical_history"].strip())
+        if s.get("notes") and s["notes"].strip() and s["notes"].strip() not in notes_list:
+            notes_list.append(s["notes"].strip())
+
+    combined_med = " | ".join(med_list)
+    combined_notes = " | ".join(notes_list)
+    new_search = patient_search_text(target["name"], new_phone, target.get("phone_note", ""), new_address, target["code"])
+
+    conn.execute(
+        "UPDATE patients SET phone=?, yob=?, address=?, branch=?, medical_history=?, notes=?, search_text=?, "
+        "updated_at=datetime('now','localtime') WHERE id=?",
+        (new_phone, new_yob, new_address, new_branch, combined_med, combined_notes, new_search, target_id),
+    )
+
+    conn.execute(f"UPDATE treatments SET patient_id = ? WHERE patient_id IN ({placeholders})", [target_id, *source_ids])
+    conn.execute(f"UPDATE payments SET patient_id = ? WHERE patient_id IN ({placeholders})", [target_id, *source_ids])
+    conn.execute(f"UPDATE appointments SET patient_id = ? WHERE patient_id IN ({placeholders})", [target_id, *source_ids])
+    conn.execute(f"UPDATE audit_logs SET patient_id = ? WHERE patient_id IN ({placeholders})", [target_id, *source_ids])
+
+    conn.execute(f"DELETE FROM patients WHERE id IN ({placeholders})", source_ids)
+
+    source_labels = [f"{s['name']} ({s['code']})" for s in sources]
+    summary = f"Gộp {len(source_ids)} hồ sơ trùng [{', '.join(source_labels)}] vào hồ sơ chính {target['name']} ({target['code']})"
+    audit(
+        conn,
+        user,
+        "patient_merge",
+        entity="patient",
+        entity_id=target_id,
+        patient_id=target_id,
+        patient_name=target["name"],
+        summary=summary,
+        changes=[{"field": "Hồ sơ đã gộp", "label": "Gộp hồ sơ", "old": [dict(s) for s in sources], "new": target["code"]}],
+    )
+
+    return {
+        "ok": True,
+        "target_id": target_id,
+        "merged_sources_count": len(source_ids),
+        "target_name": target["name"],
+        "target_code": target["code"],
+    }
+
+
+@app.get("/api/admin/patients/duplicates")
+def get_duplicate_patients(user=Depends(admin_only)):
+    with db() as conn:
+        return find_duplicate_patients(conn)
+
+
+@app.post("/api/admin/patients/merge")
+def merge_patients(data: MergePatientIn, user=Depends(admin_only)):
+    with db() as conn:
+        return execute_patient_merge(conn, user, data.target_id, data.source_ids)
+
+
+@app.post("/api/admin/patients/batch-merge")
+def batch_merge_patients(data: BatchMergeIn, user=Depends(admin_only)):
+    results = []
+    with db() as conn:
+        for item in data.merges:
+            r = execute_patient_merge(conn, user, item.target_id, item.source_ids)
+            results.append(r)
+    return {"ok": True, "merged_groups_count": len(results), "details": results}
+
+
 # ───────────────────────── treatments & payments ─────────────────────────
 @app.post("/api/patients/{pid}/treatments")
 def add_treatment(pid: int, data: TreatmentIn, user=Depends(current_user)):
