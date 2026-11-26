@@ -137,9 +137,10 @@ pause
         with open(desktop_bat, "w", encoding="utf-8") as f:
             f.write(bat_content)
 
-        desktop_url = os.path.join(desktop_dir, "Mở Nha Khoa NiBi (Máy Tính).url")
+        favicon_path = os.path.join(base_dir, "static", "favicon.ico")
+        desktop_url = os.path.join(desktop_dir, "Mở Nha Khoa NiBi.url")
         with open(desktop_url, "w", encoding="utf-8") as f:
-            f.write("[InternetShortcut]\nURL=http://127.0.0.1:8000\nIconIndex=0\n")
+            f.write(f"[InternetShortcut]\nURL=http://127.0.0.1:8000\nIconFile={favicon_path}\nIconIndex=0\n")
 
     if os.path.exists(startup_dir):
         startup_vbs = os.path.join(startup_dir, "NhaKhoaNiBi_AutoStart.vbs")
