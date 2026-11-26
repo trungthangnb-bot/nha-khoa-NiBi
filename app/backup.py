@@ -312,6 +312,8 @@ def check_and_run_weekly_backup() -> Optional[dict]:
 
 async def start_backup_scheduler():
     """Vòng lặp ngầm chạy định kỳ kiểm tra và tự động sao lưu vào Thứ Hai hàng tuần."""
+    # Đợi 5 giây để Uvicorn và cổng 8000 lắng nghe xong trước khi chạy kiểm tra sao lưu
+    await asyncio.sleep(5)
     while True:
         try:
             check_and_run_weekly_backup()

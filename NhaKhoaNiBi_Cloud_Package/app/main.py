@@ -43,10 +43,6 @@ async def lifespan(_app):
     dbm.init_db()
     with db() as conn:
         conn.execute("DELETE FROM sessions WHERE expires_at < ?", (time.time(),))
-    try:
-        check_and_run_weekly_backup()
-    except Exception as e:
-        logger.warning("Startup backup check: %s", e)
     scheduler_task = asyncio.create_task(start_backup_scheduler())
     yield
     scheduler_task.cancel()
