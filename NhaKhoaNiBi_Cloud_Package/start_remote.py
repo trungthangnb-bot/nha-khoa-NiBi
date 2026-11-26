@@ -139,7 +139,7 @@ pause
 
         desktop_url = os.path.join(desktop_dir, "Mở Nha Khoa NiBi (Máy Tính).url")
         with open(desktop_url, "w", encoding="utf-8") as f:
-            f.write("[InternetShortcut]\nURL=http://localhost:8000\nIconIndex=0\n")
+            f.write("[InternetShortcut]\nURL=http://127.0.0.1:8000\nIconIndex=0\n")
 
     if os.path.exists(startup_dir):
         startup_vbs = os.path.join(startup_dir, "NhaKhoaNiBi_AutoStart.vbs")
@@ -148,8 +148,9 @@ pause
 
 def drain(pipe):
     try:
-        for _ in iter(pipe.readline, ""):
-            pass
+        for line in iter(pipe.readline, ""):
+            if line:
+                print(f"[FastAPI] {line.strip()}")
     except Exception:
         pass
 
@@ -206,7 +207,7 @@ def update_qr_and_info(base_dir: str, local_ip: str, tunnel_url: str):
         f"   👉 Link từ xa hôm nay: {tunnel_url or 'Đang kết nối...'}\n"
         "   (Hoặc quét ảnh 'Mã_QR_Đăng_Nhập_Điện_Thoại.png' ngoài màn hình Desktop)\n\n"
         "3. TRÊN MÁY TÍNH NÀY:\n"
-        "   👉 Mở trình duyệt vào: http://localhost:8000\n\n"
+        "   👉 Mở trình duyệt vào: http://127.0.0.1:8000 hoặc http://localhost:8000\n\n"
         "4. THÔNG TIN ĐĂNG NHẬP:\n"
         "   🔑 Mật khẩu Admin: 123456\n"
         "   🛡️  Mã PIN nhân viên sửa đổi hồ sơ: 0000\n"
@@ -234,12 +235,12 @@ def main():
     # ── SINGLE INSTANCE CHECK ──
     if not acquire_singleton_lock():
         print("ℹ️ Hệ thống Nha Khoa NiBi đã đang chạy sẵn ở chế độ nền trên máy tính này.")
-        print("👉 Đang mở trình duyệt vào http://localhost:8000...")
+        print("👉 Đang mở trình duyệt vào http://127.0.0.1:8000...")
         try:
             if hasattr(os, "startfile"):
-                os.startfile("http://localhost:8000")
+                os.startfile("http://127.0.0.1:8000")
             else:
-                webbrowser.open("http://localhost:8000")
+                webbrowser.open("http://127.0.0.1:8000")
         except Exception:
             pass
         sys.exit(0)
@@ -354,7 +355,7 @@ def main():
 
     print("\n" + "=" * 70)
     print("✅ HỆ THỐNG PHÒNG KHÁM ĐÃ SẴN SÀNG HOẠT ĐỘNG:")
-    print(f"👉 Link máy tính:              http://localhost:8000")
+    print(f"👉 Link máy tính:              http://127.0.0.1:8000 hoặc http://localhost:8000")
     print(f"👉 Link Wi-Fi nội bộ phòng:     http://{local_ip}:8000")
     print(f"👉 Link Cloud cố định online:  https://nha-khoa-nibi.onrender.com")
     print(f"👉 Mã QR & Link đã lưu ngoài màn hình Desktop")
